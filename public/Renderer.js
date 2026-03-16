@@ -598,6 +598,105 @@ export class Renderer {
     ctx.restore();
   }
 
+  drawDoors(doors, cameraX, cameraY, timestamp) {
+    const { ctx, canvas } = this;
+    ctx.save();
+    const _s = this._currentScale || 1;
+    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.scale(_s, _s);
+
+    for (const door of doors) {
+      if (door.open) {
+        // Open doors — draw thin recessed panels on each side
+        this._drawOpenDoor(ctx, door);
+      } else {
+        // Closed doors — draw with caution tape
+        this._drawClosedDoor(ctx, door);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  _drawClosedDoor(ctx, door) {
+    const { x, y, w, h } = door;
+    const isHorizontal = w > h;
+
+    // Door panels
+    ctx.fillStyle = '#665533';
+    ctx.fillRect(x, y, w, h);
+
+    // Caution tape diagonal stripes
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+
+    const stripeW = 8;
+    ctx.fillStyle = '#e8c020';
+    if (isHorizontal) {
+      for (let sx = x - h; sx < x + w + h; sx += stripeW * 2) {
+        ctx.beginPath();
+        ctx.moveTo(sx, y);
+        ctx.lineTo(sx + h, y + h);
+        ctx.lineTo(sx + h + stripeW, y + h);
+        ctx.lineTo(sx + stripeW, y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    } else {
+      for (let sy = y - w; sy < y + h + w; sy += stripeW * 2) {
+        ctx.beginPath();
+        ctx.moveTo(x, sy);
+        ctx.lineTo(x + w, sy + w);
+        ctx.lineTo(x + w, sy + w + stripeW);
+        ctx.lineTo(x, sy + stripeW);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+
+    // Border
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+
+    // Center split line (double doors)
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (isHorizontal) {
+      ctx.moveTo(x + w / 2, y);
+      ctx.lineTo(x + w / 2, y + h);
+    } else {
+      ctx.moveTo(x, y + h / 2);
+      ctx.lineTo(x + w, y + h / 2);
+    }
+    ctx.stroke();
+  }
+
+  _drawOpenDoor(ctx, door) {
+    const { x, y, w, h, side } = door;
+    const isHorizontal = w > h;
+    const panelSize = 8;
+
+    ctx.fillStyle = '#554422';
+    ctx.globalAlpha = 0.5;
+
+    if (isHorizontal) {
+      // Two thin panels slid to sides
+      ctx.fillRect(x, y, panelSize, h);
+      ctx.fillRect(x + w - panelSize, y, panelSize, h);
+    } else {
+      ctx.fillRect(x, y, w, panelSize);
+      ctx.fillRect(x, y + h - panelSize, w, panelSize);
+    }
+
+    ctx.globalAlpha = 1;
+  }
+
   drawScopeOverlay(ctx, canvasW, canvasH) {
     ctx.strokeStyle = 'rgba(255, 200, 100, 0.3)';
     ctx.lineWidth = 1;

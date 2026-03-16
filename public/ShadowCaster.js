@@ -2,6 +2,8 @@ export class ShadowCaster {
   constructor() {
     this.segments = [];
     this._smokeSegmentCount = 0;
+    this._doorSegmentCount = 0;
+    this._baseSegmentCount = 0;
   }
 
   setWalls(wallRects) {
@@ -11,6 +13,28 @@ export class ShadowCaster {
       this.segments.push({ ax: r.x, ay: r.y + r.h, bx: r.x + r.w, by: r.y + r.h });
       this.segments.push({ ax: r.x, ay: r.y, bx: r.x, by: r.y + r.h });
       this.segments.push({ ax: r.x + r.w, ay: r.y, bx: r.x + r.w, by: r.y + r.h });
+    }
+    this._baseSegmentCount = this.segments.length;
+    this._doorSegmentCount = 0;
+  }
+
+  setDoorWalls(doors) {
+    // Remove previous door segments, add new ones for closed doors
+    if (this._doorSegmentCount > 0) {
+      this.segments.splice(this._baseSegmentCount, this._doorSegmentCount);
+    }
+    this._doorSegmentCount = 0;
+    if (!doors) return;
+    const closedDoors = doors.filter(d => !d.open);
+    for (const d of closedDoors) {
+      // Each door rect becomes 4 line segments
+      this.segments.splice(this._baseSegmentCount + this._doorSegmentCount, 0,
+        { ax: d.x, ay: d.y, bx: d.x + d.w, by: d.y },
+        { ax: d.x, ay: d.y + d.h, bx: d.x + d.w, by: d.y + d.h },
+        { ax: d.x, ay: d.y, bx: d.x, by: d.y + d.h },
+        { ax: d.x + d.w, ay: d.y, bx: d.x + d.w, by: d.y + d.h }
+      );
+      this._doorSegmentCount += 4;
     }
   }
 

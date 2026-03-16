@@ -45,10 +45,40 @@ export class GameRoom {
     this.usedNames = new Set();
     this.finishedPlayers = [];
 
-    this.allWalls = [...map.walls];
+    // Static walls (never change)
+    this.staticWalls = [...map.walls];
     for (const b of map.buildings) {
-      this.allWalls.push(...b.walls);
+      this.staticWalls.push(...b.walls);
     }
+
+    // Interactive doors — start closed
+    this.doors = [];
+    let doorId = 0;
+    for (const b of map.buildings) {
+      for (const d of (b.doors || [])) {
+        const door = {
+          id: `door_${doorId++}`,
+          x: d.x,
+          y: d.y,
+          w: d.w || 100,
+          side: d.side,
+          buildingId: b.id,
+          open: false,
+          animProgress: 0 // 0 = closed, 1 = open
+        };
+        // Compute the wall rect when closed
+        if (d.side === 'top' || d.side === 'bottom') {
+          const wallY = d.side === 'top' ? b.y : b.y + b.h - 10;
+          door.wallRect = { x: d.x - door.w / 2, y: wallY, w: door.w, h: 10 };
+        } else {
+          const wallX = d.side === 'left' ? b.x : b.x + b.w - 10;
+          door.wallRect = { x: wallX, y: d.y - door.w / 2, w: 10, h: door.w };
+        }
+        this.doors.push(door);
+      }
+    }
+
+    this._rebuildAllWalls();
 
     this.zone = {
       active: false,
@@ -97,6 +127,15 @@ export class GameRoom {
     socket.on('pickup', () => {
       const p = this.players.get(socket.id);
       if (!p || !p.alive || p.healing || this.state !== STATES.ACTIVE) return;
+
+      // Check for nearby door first
+      const nearDoor = this._findNearbyDoor(p);
+      if (nearDoor) {
+        nearDoor.open = !nearDoor.open;
+        this._rebuildAllWalls();
+        return;
+      }
+
       this._handlePickup(p);
     });
 
@@ -203,6 +242,34 @@ export class GameRoom {
       }
     }
     return best;
+  }
+
+  _findNearbyDoor(player) {
+    const DOOR_INTERACT_RANGE = 60;
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const door of this.doors) {
+      // Distance from player to door center
+      const doorCenterX = door.wallRect.x + door.wallRect.w / 2;
+      const doorCenterY = door.wallRect.y + door.wallRect.h / 2;
+      const dx = player.x - doorCenterX;
+      const dy = player.y - doorCenterY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < DOOR_INTERACT_RANGE && dist < nearestDist) {
+        nearestDist = dist;
+        nearest = door;
+      }
+    }
+    return nearest;
+  }
+
+  _rebuildAllWalls() {
+    this.allWalls = [...this.staticWalls];
+    for (const door of this.doors) {
+      if (!door.open) {
+        this.allWalls.push(door.wallRect);
+      }
+    }
   }
 
   _broadcastLobby() {
@@ -649,6 +716,7 @@ export class GameRoom {
         magAmmo: i.magAmmo, count: i.count, ammoType: i.ammoType, amount: i.amount
       })),
       smokes: this.smokes.map(s => ({ id: s.id, x: s.x, y: s.y, activatedAt: s.activatedAt, duration: s.duration })),
+      doors: this.doors.map(d => ({ id: d.id, x: d.wallRect.x, y: d.wallRect.y, w: d.wallRect.w, h: d.wallRect.h, open: d.open, side: d.side })),
       zone: {
         active: this.zone.active,
         centerX: this.zone.centerX,

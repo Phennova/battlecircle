@@ -478,7 +478,45 @@ export class HUD {
     ctx.globalAlpha = 1;
   }
 
-  drawItemTooltip(ctx, canvasW, canvasH, items, playerX, playerY, cameraScale) {
+  drawItemTooltip(ctx, canvasW, canvasH, items, playerX, playerY, cameraScale, doors) {
+    const scale = cameraScale || 1;
+    const DOOR_RANGE = 60;
+    const ITEM_RANGE = 40;
+
+    // Check for nearby door first
+    let nearDoor = null;
+    let nearDoorDist = Infinity;
+    if (doors) {
+      for (const door of doors) {
+        const dcx = door.x + door.w / 2;
+        const dcy = door.y + door.h / 2;
+        const dx = playerX - dcx;
+        const dy = playerY - dcy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < DOOR_RANGE && dist < nearDoorDist) {
+          nearDoorDist = dist;
+          nearDoor = door;
+        }
+      }
+    }
+
+    if (nearDoor) {
+      const dcx = nearDoor.x + nearDoor.w / 2;
+      const dcy = nearDoor.y + nearDoor.h / 2;
+      const screenX = canvasW / 2 + (dcx - playerX) * scale;
+      const screenY = canvasH / 2 + (dcy - playerY) * scale - 20 * scale;
+      const label = nearDoor.open ? '[E] Close Door' : '[E] Open Door';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(screenX - tw / 2 - 6, screenY - 16, tw + 12, 20);
+      ctx.fillStyle = '#e8d44d';
+      ctx.fillText(label, screenX, screenY);
+      return;
+    }
+
     // Find nearest item within pickup range
     let nearest = null;
     let nearestDist = Infinity;
@@ -487,7 +525,7 @@ export class HUD {
       const dx = item.x - playerX;
       const dy = item.y - playerY;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 40 && dist < nearestDist) {
+      if (dist < ITEM_RANGE && dist < nearestDist) {
         nearestDist = dist;
         nearest = item;
       }
@@ -502,7 +540,6 @@ export class HUD {
     };
     const name = NAMES[nearest.type] || nearest.type;
 
-    const scale = cameraScale || 1;
     const screenX = canvasW / 2 + (nearest.x - playerX) * scale;
     const screenY = canvasH / 2 + (nearest.y - playerY) * scale - 22 * scale;
 

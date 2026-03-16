@@ -491,6 +491,7 @@ function loop(timestamp) {
         }
       }
 
+      shadowCaster.setDoorWalls(gameState.doors);
       shadowCaster.addSmokeBlockers(activeSmokes);
       const effectiveVisionRange = isInSmoke ? 40 : currentVisionRange;
       const visibility = shadowCaster.computeVisibility(viewX, viewY, effectiveVisionRange);
@@ -556,6 +557,11 @@ function loop(timestamp) {
 
       ctx.restore();
 
+      // Doors
+      if (gameState.doors) {
+        renderer.drawDoors(gameState.doors, viewX, viewY, timestamp);
+      }
+
       // Zone, smoke clouds, effects
       renderer.drawZone(gameState.zone, viewX, viewY, timestamp);
       renderer.drawSmokeClouds(activeSmokes, viewX, viewY, timestamp);
@@ -571,7 +577,7 @@ function loop(timestamp) {
       hud.draw(ctx, canvas.width, canvas.height, me, gameState);
       hud.drawKillFeed(ctx, canvas.width, killFeed, performance.now());
       hud.drawWarning(ctx, canvas.width, canvas.height, warning, performance.now());
-      hud.drawItemTooltip(ctx, canvas.width, canvas.height, gameState.groundItems, viewX, viewY, cameraScale);
+      hud.drawItemTooltip(ctx, canvas.width, canvas.height, gameState.groundItems, viewX, viewY, cameraScale, gameState.doors);
 
     } else if (spectating && spectateTargetId && gameState) {
       // Spectator rendering
@@ -597,6 +603,7 @@ function loop(timestamp) {
           }
         }
 
+        shadowCaster.setDoorWalls(gameState.doors);
         shadowCaster.addSmokeBlockers(activeSmokes);
         const visibility = shadowCaster.computeVisibility(viewX, viewY, isInSmoke ? 40 : 600);
         shadowCaster.removeSmokeBlockers();
@@ -626,6 +633,7 @@ function loop(timestamp) {
         });
         ctx.restore();
 
+        if (gameState.doors) renderer.drawDoors(gameState.doors, viewX, viewY, timestamp);
         renderer.drawZone(gameState.zone, viewX, viewY, timestamp);
         renderer.drawSmokeClouds(activeSmokes, viewX, viewY, timestamp);
         renderer.drawExplosions(effects.explosions, viewX, viewY, performance.now());
