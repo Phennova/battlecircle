@@ -23,6 +23,21 @@ A web-based real-time multiplayer top-down 2D battle royale game. Players are ci
 
 No bundler required. Client JS is served as ES modules directly from `/public`.
 
+## Game Constants
+
+| Constant | Value | Notes |
+|---|---|---|
+| Player radius | 18px | Collision and rendering |
+| Player speed | 180px/s | Movement speed |
+| Bullet radius | 3px | Hit detection |
+| Pickup range | 40px | Distance to pick up items |
+| Vision range | 600px | Shadow casting max distance |
+| Max players | 8 | Per room |
+| Min players to start | 2 | Lobby requirement |
+| Player HP | 100 | Starting health |
+| Canvas resolution | Window-sized | Canvas fills browser viewport, scales with window |
+| Viewport | Centered on local player | Camera translates so player is always at canvas center |
+
 ## Architecture
 
 ### Directory Structure
@@ -56,7 +71,7 @@ battlecircle/
 4. **Fog of war is the core feature** — Shadow casting is built into the rendering pipeline from Phase 3 (not bolted on later). Every feature is developed and tested in the context of fog of war.
 5. **Simple 3-slot inventory** — Gun, grenade, heal. Pick up to fill, swap to replace. No inventory management UI needed.
 6. **No emojis** — All icons and visual elements are canvas-drawn geometric shapes. No Unicode emoji characters anywhere in the product.
-7. **Server-side visibility filtering deferred** — Since this is for friends, we trust the client to hide shadowed enemies. Anti-cheat filtering can be added later if the game goes public.
+7. **Server-side visibility filtering deferred** — Since this is for friends, we trust the client to hide shadowed enemies. The gameState snapshot broadcasts all players' positions and full inventory to all clients (accepted risk). Anti-cheat filtering can be added later if the game goes public.
 
 ### Data Flow
 
@@ -64,7 +79,7 @@ battlecircle/
 Client                              Server
 ──────                              ──────
 InputHandler reads WASD/mouse
-  → emit playerInput (every frame)  → GameRoom stores input state
+  → emit playerInput (on change)    → GameRoom stores input state
                                     → Tick loop (50ms):
                                         1. Compute dt
                                         2. Move players (input × speed × dt)
@@ -101,7 +116,7 @@ Game.js processes snapshot:
 
 ### Client Frame (60fps via requestAnimationFrame)
 
-1. **Read input** — WASD + mouse, emit playerInput to server
+1. **Read input** — WASD + mouse, emit playerInput to server when input state changes (not every frame — reduces traffic from ~60msg/s to ~5-10msg/s with no gameplay impact since server re-reads stored input each tick)
 2. **Client-side prediction** — apply movement locally, store input + sequence number in buffer
 3. **Reconcile with server** — on snapshot: discard processed inputs, re-apply remaining from server position, smooth-correct if diverged > 2px
 4. **Interpolate other players** — lerp between two most recent snapshots
@@ -141,7 +156,8 @@ Game.js processes snapshot:
 ```
 
 - `walls` are axis-aligned rectangles used for collision and shadow casting
-- `buildings` contain inner wall segments and door gaps
+- `buildings` contain inner wall segments and doorways
+- `doors` in the map format are doorways — gaps in the building walls where no collision segment exists. They are not interactive; players walk through them freely. Interactive doors (open/close) are a future scope item.
 - `lootSlots` are positions where items spawn at game start
 
 ## Shadow Casting (Fog of War)
@@ -186,26 +202,32 @@ Only wall segments within 600px are processed. With ~50 total segments on the ma
 | Weapon | Fire Rate | Damage | Range | Ammo | Bullet Speed | Role |
 |---|---|---|---|---|---|---|
 | Pistol | 2/s | 20 | 400px | 12 | 500 | Reliable starter. 5 shots to kill. |
-| Shotgun | 0.8/s | 8×5 pellets | 250px | 5 | 450 | CQB. 40 damage if all pellets hit. Pairs with fog ambushes. |
+| Shotgun | 0.8/s | 5 pellets, 8 dmg each | 250px | 5 | 450 | CQB. 40 damage if all pellets hit. Pairs with fog ambushes. |
 | Rifle | 1.5/s | 35 | 700px | 10 | 800 | Mid-long range. 3 shots to kill. |
 
 **Future weapons (post-launch):** SMG (10/s, 10dmg, spray), Sniper (0.4/s, 80dmg, long range)
 
+**Note:** The rifle's 700px range exceeds the 600px vision range. This is intentional — bullets can fly beyond what you can see, rewarding map awareness and creating risk when shooting at targets near your vision edge.
+
 ### Shooting Pipeline
 
-1. Client: mousedown → emit `shoot { angle }` to server
-2. Server: validate (has gun, has ammo, cooldown elapsed)
-3. Server: create Bullet entity at player position (shotgun: 5 pellets, ±0.15 rad spread)
+Shooting is driven by the `shooting` boolean in `playerInput`. When `shooting` is true, the server checks fire rate cooldown each tick and creates bullets automatically. There is no separate `shoot` event — the server handles fire rate entirely.
+
+1. Client: mousedown sets `shooting: true` in input state, mouseup sets `shooting: false`
+2. Server tick: if `shooting` is true, validate (has gun, has ammo, cooldown elapsed since last shot)
+3. Server: create Bullet entity at player position (shotgun: 5 pellets evenly distributed across ±0.15 rad arc from aim angle)
 4. Server: decrement ammo
 5. Each tick: move bullet by speed × dt
-6. Hit detection: circle-vs-circle for players, circle-vs-AABB for walls
-7. On player hit: apply damage, remove bullet, check kill
+6. Hit detection: bullet (3px radius) vs player (18px radius) circle-vs-circle, bullet vs wall AABB
+7. On player hit: apply damage, remove bullet, check kill. Bullets are removed on first hit (do not pass through players — including shotgun pellets).
 8. On wall hit or max range: remove bullet
+
+If the player has no gun or no ammo, the server silently ignores the shooting input. No feedback event is sent — the HUD shows ammo count so the player can see they're empty. The empty gun remains equipped; no dry-fire feedback in the initial build.
 
 ### Grenades
 
-- **Frag Grenade:** press G to throw at 300px/s toward aim direction
-- Stops on wall hit or at 350px travel distance
+- **Frag Grenade:** press G to throw toward current aim angle. Grenade slides along the ground (top-down perspective) at 300px/s.
+- Stops immediately on wall hit (no bounce/slide) or at 350px travel distance. Grenades do not collide with players during flight — they only deal damage on explosion.
 - 2.5s fuse timer
 - Explosion: 80px radius, 60 damage at center → 20 at edge (linear falloff)
 - Walls block explosion damage (LOS check from explosion center to each player)
@@ -217,7 +239,7 @@ Only wall segments within 600px are processed. With ~50 total segments on the ma
 - Player cannot move or shoot while healing (server-enforced)
 - Moving or shooting cancels the heal
 - Stack size: 5
-- **MedKit** (75 HP, 4s, 1 per slot) added with expanded weapon set
+- **MedKit** (future — not in initial build. 75 HP, 4s, 1 per slot. Added with expanded weapon set.)
 
 ### Kill Flow
 
@@ -255,7 +277,7 @@ On game start, server rolls one random item per loot slot using weighted table:
 ### Pickup
 
 - Client sends `pickup` when player presses E
-- Server checks: any ground item within 40px of player?
+- Server checks: any ground item within 40px of player? If multiple items in range, pick up the nearest one.
 - If matching slot is empty: equip
 - If matching slot is occupied: swap (drop current item at player position)
 - Grenades/bandages of same type: add to stack (up to max)
@@ -295,7 +317,8 @@ damagePerSecond: 8
 ### Lobby (WAITING)
 
 - All players auto-join the same room (no room codes)
-- Game starts when: max players (8) reached, OR any player clicks Start with ≥ 2 players, OR 30s auto-timer with ≥ 2 players
+- Game starts when: max players (8) reached, OR any player clicks Start with ≥ 2 players, OR 30s auto-timer with ≥ 2 players. The 30s timer starts when the 2nd player joins and resets if player count drops below 2.
+- Spawn point assignment: randomly selected from the 16 edge points, maximizing minimum distance between assigned spawns (greedy algorithm — each new player gets the spawn point farthest from all already-assigned spawns)
 - UI: dark background, game title, "Waiting for players..." with count
 
 ### Countdown
@@ -315,6 +338,10 @@ damagePerSecond: 8
 - Eliminated players: "ELIMINATED" screen with red text, canvas fades to greyscale
 - "Play Again" button → rejoin lobby
 
+### Disconnection
+
+Disconnected players are immediately killed and drop all their loot. No reconnection window — for a LAN/friends game, they can simply rejoin the next match.
+
 ## HUD Layout
 
 All elements drawn on canvas (screen-space, no camera transform). No emojis — all icons are canvas-drawn geometric shapes.
@@ -332,15 +359,18 @@ All elements drawn on canvas (screen-space, no camera transform). No emojis — 
 - **Grenades:** circle with fuse line
 - **Bandages:** cross/plus shape
 
+### Ground Item Rendering
+
+Ground loot items are drawn as small colored circles (radius ~10px) with a 1px border, color-coded by type: grey for pistol, orange for shotgun, blue for rifle, orange-red for grenades, green for bandages. A subtle pulsing glow helps them stand out against the floor. Uses the same color scheme as HUD slot icons for consistency.
+
 ## Network Protocol
 
 ### Client → Server
 
 | Event | Payload | Description |
 |---|---|---|
-| `playerInput` | `{ up, down, left, right, shooting, angle, seq }` | Continuous input state with sequence number |
-| `shoot` | `{ angle }` | Fire gun |
-| `throwGrenade` | `{ angle }` | Throw grenade |
+| `playerInput` | `{ up, down, left, right, shooting, angle, seq }` | Input state, sent on change. `shooting` boolean drives server-side fire rate. |
+| `throwGrenade` | `{}` | Throw grenade toward current aim angle (read from stored playerInput) |
 | `useHeal` | `{}` | Use heal item |
 | `pickup` | `{}` | Pick up nearest item |
 
@@ -369,7 +399,7 @@ All elements drawn on canvas (screen-space, no camera transform). No emojis — 
     "heal": { "type": "bandage", "count": 3 },
     "healing": false
   }],
-  "bullets": [{ "id": "", "x": 0, "y": 0, "angle": 0 }],
+  "bullets": [{ "id": "", "x": 0, "y": 0, "angle": 0, "type": "rifle", "ownerId": "" }],
   "grenades": [{ "id": "", "x": 0, "y": 0, "explodeAt": 0 }],
   "groundItems": [{ "id": "", "type": "", "x": 0, "y": 0, "ammo": 0 }],
   "zone": { "active": true, "centerX": 1200, "centerY": 1200, "currentRadius": 800, "finalRadius": 120 },
@@ -399,9 +429,17 @@ For each wall rect:
   dx = circle.x - nearX
   dy = circle.y - nearY
   dist = sqrt(dx² + dy²)
-  if dist < radius and dist > 0:
-    overlap = radius - dist
-    push circle out by (dx/dist * overlap, dy/dist * overlap)
+  if dist < radius:
+    if dist > 0:
+      overlap = radius - dist
+      push circle out by (dx/dist * overlap, dy/dist * overlap)
+    else:
+      // Center is exactly inside rect — push out along axis of least penetration
+      overlapLeft = circle.x - rect.x
+      overlapRight = (rect.x + rect.w) - circle.x
+      overlapTop = circle.y - rect.y
+      overlapBottom = (rect.y + rect.h) - circle.y
+      push out along the axis with smallest overlap
 ```
 
 ### Ray-Segment Intersection (for shadow casting)
