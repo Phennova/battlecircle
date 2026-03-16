@@ -162,17 +162,50 @@ socket.on('gameOver', (data) => {
   gameActive = false;
   const overlay = document.getElementById('overlay');
   overlay.style.display = 'flex';
-  if (data.winnerId === myId) {
-    overlay.innerHTML = `
-      <h1 style="font-size:48px;color:#ffc832;letter-spacing:4px">VICTORY</h1>
-      <button onclick="location.reload()" style="margin-top:20px;padding:12px 32px;font-size:18px;background:#4a9eff;color:#fff;border:none;border-radius:8px;cursor:pointer">Play Again</button>
-    `;
-  } else {
-    overlay.innerHTML = `
-      <h1 style="font-size:36px;color:#ff4444;letter-spacing:4px">GAME OVER</h1>
-      <button onclick="location.reload()" style="margin-top:20px;padding:12px 32px;font-size:18px;background:#4a9eff;color:#fff;border:none;border-radius:8px;cursor:pointer">Play Again</button>
+
+  const isWinner = data.winnerId === myId;
+  const title = isWinner
+    ? '<h1 style="font-size:48px;color:#ffc832;letter-spacing:4px;margin-bottom:16px">VICTORY</h1>'
+    : '<h1 style="font-size:36px;color:#ff4444;letter-spacing:4px;margin-bottom:16px">GAME OVER</h1>';
+
+  let leaderboardHTML = '';
+  if (data.standings && data.standings.length > 0) {
+    const me = gameState ? gameState.players.find(p => p.id === myId) : null;
+    const myName = me ? me.name : '';
+    const rows = data.standings.map(p => {
+      const isMe = p.name === myName;
+      const isFirst = p.placement === 1;
+      const rowBg = isFirst ? 'rgba(255,200,50,0.15)' : isMe ? 'rgba(74,158,255,0.1)' : 'rgba(255,255,255,0.03)';
+      const rowBorder = isFirst ? '1px solid rgba(255,200,50,0.3)' : isMe ? '1px solid rgba(74,158,255,0.2)' : 'none';
+      const nameColor = isFirst ? '#ffc832' : '#ccc';
+      return `<tr style="background:${rowBg};border:${rowBorder}">
+        <td style="padding:6px 12px;color:#888">${p.placement}</td>
+        <td style="padding:6px 12px;color:${nameColor}">${p.name}</td>
+        <td style="padding:6px 12px;text-align:center;color:#ccc">${p.kills}</td>
+        <td style="padding:6px 12px;text-align:center;color:#ccc">${p.damageDealt}</td>
+      </tr>`;
+    }).join('');
+
+    leaderboardHTML = `
+      <table style="border-collapse:collapse;margin:16px 0;font-size:13px;font-family:sans-serif;min-width:360px">
+        <thead>
+          <tr style="border-bottom:1px solid #444">
+            <th style="padding:6px 12px;color:#888;text-align:left">#</th>
+            <th style="padding:6px 12px;color:#888;text-align:left">Name</th>
+            <th style="padding:6px 12px;color:#888;text-align:center">Kills</th>
+            <th style="padding:6px 12px;color:#888;text-align:center">Damage</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
     `;
   }
+
+  overlay.innerHTML = `
+    ${title}
+    ${leaderboardHTML}
+    <button onclick="location.reload()" style="margin-top:12px;padding:12px 32px;font-size:18px;background:#4a9eff;color:#fff;border:none;border-radius:8px;cursor:pointer">Play Again</button>
+  `;
 });
 
 // Input sending
@@ -268,11 +301,8 @@ function loop(timestamp) {
     return;
   }
 
-  // Game over with leaderboard
-  if (gameOverData && gameState) {
-    const me = gameState.players.find(p => p.id === myId);
-    hud.drawLeaderboard(ctx, canvas.width, canvas.height, gameOverData.standings, me ? me.name : '');
-    hud.drawKillFeed(ctx, canvas.width, killFeed, performance.now());
+  // Game over — leaderboard is in the HTML overlay now, nothing to draw
+  if (gameOverData) {
     requestAnimationFrame(loop);
     return;
   }
