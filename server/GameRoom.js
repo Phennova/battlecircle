@@ -8,14 +8,14 @@ import { WEAPONS, AMMO_TYPES } from '../shared/weapons.js';
 const STATES = { WAITING: 'WAITING', COUNTDOWN: 'COUNTDOWN', ACTIVE: 'ACTIVE', ENDED: 'ENDED' };
 
 const LOOT_TABLE = [
-  { type: 'pistol', slot: 'gun', weight: 20 },
-  { type: 'shotgun', slot: 'gun', weight: 10 },
-  { type: 'rifle', slot: 'gun', weight: 8 },
-  { type: 'frag', slot: 'grenade', weight: 12 },
-  { type: 'bandage', slot: 'heal', weight: 15 },
-  { type: 'pistol_ammo', slot: 'ammo', ammoType: 'pistol', weight: 15 },
-  { type: 'shotgun_ammo', slot: 'ammo', ammoType: 'shotgun', weight: 10 },
-  { type: 'rifle_ammo', slot: 'ammo', ammoType: 'rifle', weight: 10 },
+  { type: 'pistol', slot: 'gun', weight: 22 },
+  { type: 'shotgun', slot: 'gun', weight: 14 },
+  { type: 'rifle', slot: 'gun', weight: 12 },
+  { type: 'frag', slot: 'grenade', weight: 6 },
+  { type: 'bandage', slot: 'heal', weight: 8 },
+  { type: 'pistol_ammo', slot: 'ammo', ammoType: 'pistol', weight: 14 },
+  { type: 'shotgun_ammo', slot: 'ammo', ammoType: 'shotgun', weight: 12 },
+  { type: 'rifle_ammo', slot: 'ammo', ammoType: 'rifle', weight: 12 },
 ];
 
 let nextItemId = 0;
