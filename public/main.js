@@ -69,6 +69,12 @@ function getPlayerColor(player, index) {
   return COLORS[index % COLORS.length];
 }
 
+// Lobby UI (must be declared before mode select references them)
+const lobby = document.getElementById('lobby');
+const lobbyStatus = lobby.querySelector('.status');
+const readyBtn = document.getElementById('readyBtn');
+const playerList = document.getElementById('playerList');
+
 // Mode select
 const modeSelect = document.getElementById('modeSelect');
 const modeLabel = document.getElementById('modeLabel');
@@ -88,12 +94,6 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 document.getElementById('backBtn').addEventListener('click', () => {
   location.reload();
 });
-
-// Lobby UI
-const lobby = document.getElementById('lobby');
-const lobbyStatus = lobby.querySelector('.status');
-const readyBtn = document.getElementById('readyBtn');
-const playerList = document.getElementById('playerList');
 let isReady = false;
 let currentModeConfig = null;
 
