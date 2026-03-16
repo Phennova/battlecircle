@@ -104,17 +104,22 @@ export class GameRoom {
   }
 
   addPlayer(socket) {
-    const spawn = this._pickSpawn();
     const name = generateName(this.usedNames);
     this.usedNames.add(name);
-    const player = new Player(socket.id, spawn.x, spawn.y, name);
+    // Create player at temp position, assign team, then pick spawn
+    const player = new Player(socket.id, 0, 0, name);
 
-    // Assign team for team modes
+    // Assign team for team modes (auto-balance)
     if (this.mode.teams) {
       const teamCounts = [0, 0];
       this.players.forEach(p => { if (p.team !== undefined) teamCounts[p.team]++; });
       player.team = teamCounts[0] <= teamCounts[1] ? 0 : 1;
     }
+
+    // Pick spawn (uses team info for clustering)
+    const spawn = this._pickSpawn(player);
+    player.x = spawn.x;
+    player.y = spawn.y;
 
     this.players.set(socket.id, player);
     socket.join(this.id);
@@ -256,8 +261,29 @@ export class GameRoom {
     }
   }
 
-  _pickSpawn() {
+  _pickSpawn(forPlayer) {
     const spawns = [...this.map.spawnPoints];
+
+    // In team modes, try to spawn near teammates
+    if (this.mode.teams && forPlayer && forPlayer.team !== undefined) {
+      const teammates = [...this.players.values()].filter(
+        p => p.id !== forPlayer.id && p.team === forPlayer.team && p.alive
+      );
+      if (teammates.length > 0) {
+        // Pick spawn closest to teammates' average position
+        const avgX = teammates.reduce((s, t) => s + t.x, 0) / teammates.length;
+        const avgY = teammates.reduce((s, t) => s + t.y, 0) / teammates.length;
+        let best = spawns[0];
+        let bestDist = Infinity;
+        for (const sp of spawns) {
+          const d = Math.sqrt((sp.x - avgX) ** 2 + (sp.y - avgY) ** 2);
+          if (d < bestDist) { bestDist = d; best = sp; }
+        }
+        return best;
+      }
+    }
+
+    // Default: pick spawn farthest from all other players
     const used = [...this.players.values()].map(p => ({ x: p.x, y: p.y }));
     if (used.length === 0) return spawns[Math.floor(Math.random() * spawns.length)];
 
@@ -811,7 +837,7 @@ export class GameRoom {
       if (now >= entry.respawnAt) {
         const player = this.players.get(entry.playerId);
         if (player) {
-          const spawn = this._pickSpawn();
+          const spawn = this._pickSpawn(player);
           player.x = spawn.x;
           player.y = spawn.y;
           player.health = 100;

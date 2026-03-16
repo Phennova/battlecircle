@@ -24,7 +24,7 @@ export class HUD {
     }
   }
 
-  drawMinimap(ctx, canvasW, canvasH, map, playerX, playerY, zone, destroyedWalls) {
+  drawMinimap(ctx, canvasW, canvasH, map, playerX, playerY, zone, destroyedWalls, teammates) {
     if (!map) return;
 
     const SIZE = 140;
@@ -96,6 +96,16 @@ export class HUD {
       ctx.arc(mx + zone.centerX * scale, my + zone.centerY * scale, zone.currentRadius * scale, 0, Math.PI * 2, true);
       ctx.fill('evenodd');
       ctx.restore();
+    }
+
+    // Teammate dots
+    if (teammates && teammates.length > 0) {
+      ctx.fillStyle = 'rgba(74, 158, 255, 0.6)';
+      for (const t of teammates) {
+        ctx.beginPath();
+        ctx.arc(mx + t.x * scale, my + t.y * scale, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     // Local player dot

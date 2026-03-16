@@ -713,7 +713,10 @@ function loop(timestamp) {
 
       // HUD
       hud.draw(ctx, canvas.width, canvas.height, me, gameState);
-      hud.drawMinimap(ctx, canvas.width, canvas.height, map, viewX, viewY, gameState.zone, gameState.destroyedWalls);
+      const teammates = (me.team !== undefined && me.team !== null)
+        ? gameState.players.filter(p => p.id !== myId && p.alive && p.team === me.team)
+        : [];
+      hud.drawMinimap(ctx, canvas.width, canvas.height, map, viewX, viewY, gameState.zone, gameState.destroyedWalls, teammates);
       hud.drawKillFeed(ctx, canvas.width, killFeed, performance.now());
       hud.drawWarning(ctx, canvas.width, canvas.height, warning, performance.now());
       hud.drawItemTooltip(ctx, canvas.width, canvas.height, gameState.groundItems, viewX, viewY, cameraScale, gameState.doors);
@@ -779,7 +782,7 @@ function loop(timestamp) {
 
         hud.drawSpectatorHUD(ctx, canvas.width, canvas.height,
           spectTarget.name || '?', gameState.alivePlayers, gameState.players.length);
-        hud.drawMinimap(ctx, canvas.width, canvas.height, map, viewX, viewY, gameState.zone, gameState.destroyedWalls);
+        hud.drawMinimap(ctx, canvas.width, canvas.height, map, viewX, viewY, gameState.zone, gameState.destroyedWalls, []);
         hud.drawKillFeed(ctx, canvas.width, killFeed, performance.now());
 
         // Spectator controls
