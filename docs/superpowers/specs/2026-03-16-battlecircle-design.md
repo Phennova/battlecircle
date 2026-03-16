@@ -30,7 +30,8 @@ No bundler required. Client JS is served as ES modules directly from `/public`.
 | Player radius | 18px | Collision and rendering |
 | Player speed | 180px/s | Movement speed |
 | Bullet radius | 3px | Hit detection |
-| Pickup range | 40px | Distance to pick up items |
+| Pickup range | 40px | Distance to pick up equipment (E key) |
+| Ammo collect range | 40px | Distance to auto-collect ammo (walk over) |
 | Vision range | 600px | Shadow casting max distance |
 | Max players | 8 | Per room |
 | Min players to start | 2 | Lobby requirement |
@@ -199,11 +200,23 @@ Only wall segments within 600px are processed. With ~50 total segments on the ma
 
 ### Initial Weapons (Phase 1)
 
-| Weapon | Fire Rate | Damage | Range | Ammo | Bullet Speed | Role |
-|---|---|---|---|---|---|---|
-| Pistol | 2/s | 20 | 400px | 12 | 500 | Reliable starter. 5 shots to kill. |
-| Shotgun | 0.8/s | 5 pellets, 8 dmg each | 250px | 5 | 450 | CQB. 40 damage if all pellets hit. Pairs with fog ambushes. |
-| Rifle | 1.5/s | 35 | 700px | 10 | 800 | Mid-long range. 3 shots to kill. |
+| Weapon | Fire Rate | Damage | Range | Magazine | Reload Time | Bullet Speed | Role |
+|---|---|---|---|---|---|---|---|
+| Pistol | 2/s | 20 | 400px | 12 | 1.0s | 500 | Reliable starter. 5 shots to kill. |
+| Shotgun | 0.8/s | 5 pellets, 8 dmg each | 250px | 5 | 1.5s | 450 | CQB. 40 damage if all pellets hit. Pairs with fog ambushes. |
+| Rifle | 1.5/s | 35 | 700px | 10 | 1.5s | 800 | Mid-long range. 3 shots to kill. |
+
+### Ammo Types
+
+Each weapon uses its own ammo type. Ammo spawns as ground loot and is **auto-collected** when a player walks within 40px (no button press needed). Reserve ammo has no storage cap.
+
+| Ammo Type | For Weapon | Per Pickup | Ground Color | Ground Shape |
+|---|---|---|---|---|
+| Pistol Ammo | Pistol | 12 rounds | #aaa (grey) | Small square |
+| Shotgun Shells | Shotgun | 6 shells | #ff8c42 (orange) | Small rectangle (wide) |
+| Rifle Rounds | Rifle | 8 rounds | #4a9eff (blue) | Small diamond |
+
+Ammo is collected regardless of whether the player currently has the matching gun — they keep it in reserve for when they find one.
 
 **Future weapons (post-launch):** SMG (10/s, 10dmg, spray), Sniper (0.4/s, 80dmg, long range)
 
@@ -211,18 +224,27 @@ Only wall segments within 600px are processed. With ~50 total segments on the ma
 
 ### Shooting Pipeline
 
-Shooting is driven by the `shooting` boolean in `playerInput`. When `shooting` is true, the server checks fire rate cooldown each tick and creates bullets automatically. There is no separate `shoot` event — the server handles fire rate entirely.
+Shooting is driven by the `shooting` boolean in `playerInput`, triggered by **spacebar** (not mouse click). When `shooting` is true, the server checks fire rate cooldown each tick and creates bullets automatically. The mouse controls aim direction only.
 
-1. Client: mousedown sets `shooting: true` in input state, mouseup sets `shooting: false`
-2. Server tick: if `shooting` is true, validate (has gun, has ammo, cooldown elapsed since last shot)
+1. Client: spacebar down sets `shooting: true` in input state, spacebar up sets `shooting: false`
+2. Server tick: if `shooting` is true, validate (has gun, magazine has ammo, cooldown elapsed since last shot, not reloading)
 3. Server: create Bullet entity at player position (shotgun: 5 pellets evenly distributed across ±0.15 rad arc from aim angle)
-4. Server: decrement ammo
+4. Server: decrement magazine ammo by 1
 5. Each tick: move bullet by speed × dt
 6. Hit detection: bullet (3px radius) vs player (18px radius) circle-vs-circle, bullet vs wall AABB
 7. On player hit: apply damage, remove bullet, check kill. Bullets are removed on first hit (do not pass through players — including shotgun pellets).
 8. On wall hit or max range: remove bullet
 
-If the player has no gun or no ammo, the server silently ignores the shooting input. No feedback event is sent — the HUD shows ammo count so the player can see they're empty. The empty gun remains equipped; no dry-fire feedback in the initial build.
+If the player has no gun or magazine is empty, the server silently ignores the shooting input. The HUD shows magazine and reserve ammo counts so the player can see when they need to reload.
+
+### Reloading
+
+- Press **R** to reload. Client emits `reload` event.
+- Server validates: player has gun, magazine is not full, player has reserve ammo for that weapon type, not already reloading.
+- Player enters reloading state (server-enforced): cannot shoot or move during reload. Moving cancels the reload (same as healing).
+- Reload duration is per-weapon (Pistol: 1.0s, Shotgun: 1.5s, Rifle: 1.5s).
+- On completion: fill magazine from reserve (up to magazine capacity). Deduct from reserve.
+- Example: Rifle magazine=3, reserve=20, reload → magazine=10, reserve=13.
 
 ### Grenades
 
@@ -244,43 +266,69 @@ If the player has no gun or no ammo, the server silently ignores the shooting in
 ### Kill Flow
 
 1. Player health ≤ 0 → mark `alive = false`
-2. Drop all items at death position as ground loot
-3. Emit `playerKilled { victimId, killerId }` to room
-4. Check if 1 player remains → emit `gameOver { winnerId }`
+2. Drop all equipment at death position as ground loot (gun with remaining magazine ammo, grenades, heals)
+3. Drop ammo reserves as ground ammo items at death position (one item per type that has reserves)
+4. Emit `playerKilled { victimId, killerId }` to room
+5. Check if 1 player remains → emit `gameOver { winnerId }`
 
 ## Items & Loot
 
 ### Inventory Model
 
-Three slots, each holds one item type:
+Three equipment slots, each holds one item type, plus an ammo reserve:
 
 | Slot | Holds | Behavior |
 |---|---|---|
-| Gun | 1 weapon + ammo count | Pick up to equip, pick up another to swap (dropped gun keeps remaining ammo) |
-| Grenade | 1 grenade type, stacks to 3 | Same type adds to stack, different type swaps |
-| Heal | 1 heal type, stacks to 5 | Same type adds to stack, different type swaps |
+| Gun | 1 weapon (magazine + reserve ammo) | Press E near gun to equip/swap. Dropped gun keeps magazine ammo. |
+| Grenade | 1 grenade type, stacks to 3 | Press E near grenades. Same type adds to stack, different type swaps. |
+| Heal | 1 heal type, stacks to 5 | Press E near heals. Same type adds to stack, different type swaps. |
+| Ammo Reserve | Per-weapon-type, unlimited | Auto-collected on walk-over (no button press). Stored even without matching gun. |
 
-All slots start empty. Players start unarmed.
+All slots start empty. Players start unarmed with zero ammo reserves.
+
+### Ammo Reserve
+
+Each player has an ammo reserve object tracking rounds per weapon type:
+
+```
+ammoReserve: { pistol: 0, shotgun: 0, rifle: 0 }
+```
+
+- Walking over ammo ground items adds to the matching reserve automatically.
+- Reserve has no cap — store as much as you want.
+- Reloading pulls from the reserve into the equipped gun's magazine.
+- On death, ammo reserve is dropped as individual ammo items at the death position (one item per type that has ammo, using the per-pickup amount to determine how many items to drop).
 
 ### Loot Spawning
 
 On game start, server rolls one random item per loot slot using weighted table:
 
-| Item | Weight |
-|---|---|
-| Pistol | 30 |
-| Shotgun | 15 |
-| Rifle | 10 |
-| Frag Grenade | 15 |
-| Bandage | 20 |
+| Item | Weight | Type |
+|---|---|---|
+| Pistol | 20 | equipment |
+| Shotgun | 10 | equipment |
+| Rifle | 8 | equipment |
+| Frag Grenade | 12 | equipment |
+| Bandage | 15 | equipment |
+| Pistol Ammo | 15 | ammo |
+| Shotgun Shells | 10 | ammo |
+| Rifle Rounds | 10 | ammo |
 
-### Pickup
+### Equipment Pickup (E key)
 
 - Client sends `pickup` when player presses E
-- Server checks: any ground item within 40px of player? If multiple items in range, pick up the nearest one.
+- Server checks: any **equipment** ground item within 40px of player? If multiple items in range, pick up the nearest one.
 - If matching slot is empty: equip
 - If matching slot is occupied: swap (drop current item at player position)
 - Grenades/bandages of same type: add to stack (up to max)
+- Ammo items are NOT picked up with E — they auto-collect (see below)
+
+### Ammo Auto-Collect
+
+- Each server tick, check if any alive player is within 40px of an ammo ground item
+- If so: add the ammo amount to the player's `ammoReserve` for that weapon type, remove item from ground
+- No button press needed — just walk over it
+- Auto-collect works even if the player doesn't have the matching gun
 
 ## Red Zone
 
@@ -349,8 +397,9 @@ All elements drawn on canvas (screen-space, no camera transform). No emojis — 
 - **Top-left:** Alive player count ("Alive: 5 / 8")
 - **Top-right:** Zone timer ("Zone in: 1:24" → "Zone active" with pulsing red)
 - **Bottom-left:** Health bar (green → yellow → red gradient based on HP%)
-- **Bottom-center:** 3 inventory slots (rounded rects with canvas-drawn item icons, ammo/count labels, active slot has bright border glow)
-- **Bottom-right:** Keybind hints (E pickup, G grenade, H heal)
+- **Bottom-center:** 3 inventory slots (rounded rects with canvas-drawn item icons, magazine ammo/count labels, active slot has bright border glow)
+- **Right side:** Ammo reserve counts per weapon type (stacked vertically: pistol/shotgun/rifle with matching colors and ammo type icons)
+- **Bottom-right:** Keybind hints (E pickup, G grenade, H heal, R reload)
 - **Hit indicator:** 300ms red flash on screen edge when damaged
 
 ### Item Icons (canvas-drawn)
@@ -361,7 +410,14 @@ All elements drawn on canvas (screen-space, no camera transform). No emojis — 
 
 ### Ground Item Rendering
 
-Ground loot items are drawn as small colored circles (radius ~10px) with a 1px border, color-coded by type: grey for pistol, orange for shotgun, blue for rifle, orange-red for grenades, green for bandages. A subtle pulsing glow helps them stand out against the floor. Uses the same color scheme as HUD slot icons for consistency.
+**Equipment items** are drawn as small colored circles (radius ~10px) with a 1px border, color-coded by type: grey for pistol, orange for shotgun, blue for rifle, orange-red for grenades, green for bandages. A subtle pulsing glow helps them stand out against the floor.
+
+**Ammo items** have distinct shapes per type (smaller than equipment, ~7px):
+- Pistol Ammo: small grey square
+- Shotgun Shells: small orange wide rectangle
+- Rifle Rounds: small blue diamond
+
+Ammo items also have a subtle glow. Both use the same color scheme as HUD icons for consistency.
 
 ## Network Protocol
 
@@ -369,11 +425,12 @@ Ground loot items are drawn as small colored circles (radius ~10px) with a 1px b
 
 | Event | Payload | Description |
 |---|---|---|
-| `playerInput` | `{ up, down, left, right, shooting, angle, seq }` | Input state, sent on change. `shooting` boolean drives server-side fire rate. |
+| `playerInput` | `{ up, down, left, right, shooting, angle, seq }` | Input state, sent on change. `shooting` (spacebar) drives server-side fire rate. |
 | `requestStart` | `{}` | Lobby: request game start (requires ≥ 2 players) |
 | `throwGrenade` | `{}` | Throw grenade toward current aim angle (read from stored playerInput) |
 | `useHeal` | `{}` | Use heal item |
-| `pickup` | `{}` | Pick up nearest item |
+| `pickup` | `{}` | Pick up nearest equipment item (E key). Ammo auto-collects. |
+| `reload` | `{}` | Reload current gun from ammo reserve (R key) |
 
 ### Server → Client
 
@@ -396,10 +453,12 @@ Ground loot items are drawn as small colored circles (radius ~10px) with a 1px b
   "players": [{
     "id": "", "x": 0, "y": 0, "angle": 0,
     "health": 100, "alive": true,
-    "gun": { "type": "rifle", "ammo": 8 },
+    "gun": { "type": "rifle", "magAmmo": 8, "magSize": 10 },
     "grenade": { "type": "frag", "count": 2 },
     "heal": { "type": "bandage", "count": 3 },
-    "healing": false
+    "ammoReserve": { "pistol": 24, "shotgun": 0, "rifle": 16 },
+    "healing": false,
+    "reloading": false
   }],
   "bullets": [{ "id": "", "x": 0, "y": 0, "angle": 0, "type": "rifle", "ownerId": "" }],
   "grenades": [{ "id": "", "x": 0, "y": 0, "explodeAt": 0 }],

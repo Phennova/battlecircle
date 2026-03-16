@@ -3219,3 +3219,343 @@ socket.on('playerKilled', (data) => {
   }
 });
 ```
+
+### E11: Ammo system overhaul (applies to multiple tasks)
+
+The ammo/reload system was redesigned after the initial plan was written. Apply these changes:
+
+#### E11a: Update `shared/weapons.js` (Task 6)
+
+Add `magSize` and `reloadTime` fields. Remove `ammo` field (now `magSize`):
+
+```js
+export const WEAPONS = {
+  pistol: {
+    name: 'Pistol',
+    fireRate: 2,
+    damage: 20,
+    range: 400,
+    magSize: 12,
+    reloadTime: 1000,  // ms
+    bulletSpeed: 500,
+    pellets: 1,
+    spread: 0,
+    color: '#aaa'
+  },
+  shotgun: {
+    name: 'Shotgun',
+    fireRate: 0.8,
+    damage: 8,
+    range: 250,
+    magSize: 5,
+    reloadTime: 1500,
+    bulletSpeed: 450,
+    pellets: 5,
+    spread: 0.15,
+    color: '#ff8c42'
+  },
+  rifle: {
+    name: 'Rifle',
+    fireRate: 1.5,
+    damage: 35,
+    range: 700,
+    magSize: 10,
+    reloadTime: 1500,
+    bulletSpeed: 800,
+    pellets: 1,
+    spread: 0,
+    color: '#4a9eff'
+  }
+};
+
+export const AMMO_TYPES = {
+  pistol: { name: 'Pistol Ammo', perPickup: 12, color: '#aaa', shape: 'square' },
+  shotgun: { name: 'Shotgun Shells', perPickup: 6, color: '#ff8c42', shape: 'rect' },
+  rifle: { name: 'Rifle Rounds', perPickup: 8, color: '#4a9eff', shape: 'diamond' }
+};
+```
+
+#### E11b: Update `server/Player.js` (Task 5)
+
+Add ammo reserve and reloading state:
+
+```js
+// In constructor, add:
+this.ammoReserve = { pistol: 0, shotgun: 0, rifle: 0 };
+this.reloading = false;
+this.reloadingUntil = 0;
+
+// Gun now stores: { type, magAmmo } (not 'ammo')
+// When equipping a gun: player.gun = { type: 'pistol', magAmmo: WEAPONS.pistol.magSize };
+```
+
+Update `toSnapshot()`:
+```js
+toSnapshot() {
+  return {
+    // ...existing fields...
+    gun: this.gun ? { type: this.gun.type, magAmmo: this.gun.magAmmo, magSize: WEAPONS[this.gun.type].magSize } : null,
+    ammoReserve: this.ammoReserve,
+    reloading: this.reloading,
+    kills: this.kills
+  };
+}
+```
+
+#### E11c: Update shooting in `server/GameRoom.js` (Task 6)
+
+Change shooting validation to check `player.gun.magAmmo` instead of `player.gun.ammo`:
+
+```js
+// In _tick() shooting section:
+if (!player.alive || !player.input.shooting || !player.gun || player.healing || player.reloading) return;
+// ...
+if (player.gun.magAmmo <= 0) return;
+// ...
+player.gun.magAmmo--;
+```
+
+#### E11d: Add reload handler in `GameRoom.addPlayer()` (Task 5/10)
+
+```js
+socket.on('reload', () => {
+  const p = this.players.get(socket.id);
+  if (!p || !p.alive || !p.gun || p.reloading || p.healing) return;
+  if (p.gun.magAmmo >= WEAPONS[p.gun.type].magSize) return; // mag full
+  if (p.ammoReserve[p.gun.type] <= 0) return; // no reserve
+  p.reloading = true;
+  p.reloadingUntil = Date.now() + WEAPONS[p.gun.type].reloadTime;
+});
+```
+
+#### E11e: Add reload processing in `_tick()` (after healing update)
+
+```js
+// 7. Update reloading
+this.players.forEach((player) => {
+  if (!player.alive || !player.reloading) return;
+
+  // Cancel reload if moving
+  const inp = player.input;
+  if (inp.up || inp.down || inp.left || inp.right) {
+    player.reloading = false;
+    player.reloadingUntil = 0;
+    return;
+  }
+
+  if (Date.now() >= player.reloadingUntil) {
+    const weapon = WEAPONS[player.gun.type];
+    const needed = weapon.magSize - player.gun.magAmmo;
+    const available = player.ammoReserve[player.gun.type];
+    const toLoad = Math.min(needed, available);
+    player.gun.magAmmo += toLoad;
+    player.ammoReserve[player.gun.type] -= toLoad;
+    player.reloading = false;
+    player.reloadingUntil = 0;
+  }
+});
+```
+
+#### E11f: Add ammo auto-collect in `_tick()` (new step, after movement)
+
+```js
+// 1.5. Auto-collect ammo
+for (let i = this.groundItems.length - 1; i >= 0; i--) {
+  const item = this.groundItems[i];
+  if (item.slot !== 'ammo') continue;
+  this.players.forEach((player) => {
+    if (!player.alive) return;
+    const dx = item.x - player.x;
+    const dy = item.y - player.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < PICKUP_RANGE) {
+      player.ammoReserve[item.ammoType] += item.amount;
+      this.groundItems.splice(i, 1);
+    }
+  });
+}
+```
+
+#### E11g: Update `_spawnLoot()` for ammo items
+
+Add ammo items to the loot table:
+
+```js
+const LOOT_TABLE = [
+  { type: 'pistol', slot: 'gun', weight: 20 },
+  { type: 'shotgun', slot: 'gun', weight: 10 },
+  { type: 'rifle', slot: 'gun', weight: 8 },
+  { type: 'frag', slot: 'grenade', weight: 12 },
+  { type: 'bandage', slot: 'heal', weight: 15 },
+  { type: 'pistol_ammo', slot: 'ammo', ammoType: 'pistol', weight: 15 },
+  { type: 'shotgun_ammo', slot: 'ammo', ammoType: 'shotgun', weight: 10 },
+  { type: 'rifle_ammo', slot: 'ammo', ammoType: 'rifle', weight: 10 },
+];
+```
+
+When spawning ammo items:
+```js
+if (picked.slot === 'ammo') {
+  item.ammoType = picked.ammoType;
+  item.amount = AMMO_TYPES[picked.ammoType].perPickup;
+}
+```
+
+#### E11h: Update `_dropItems()` for ammo reserves
+
+```js
+// After dropping equipment, drop ammo reserves:
+for (const [type, amount] of Object.entries(player.ammoReserve)) {
+  if (amount > 0) {
+    const perPickup = AMMO_TYPES[type].perPickup;
+    const itemCount = Math.ceil(amount / perPickup);
+    for (let i = 0; i < itemCount; i++) {
+      const dropAmount = Math.min(perPickup, amount - i * perPickup);
+      this.groundItems.push({
+        id: `item_${Date.now()}_ammo_${type}_${i}`,
+        type: `${type}_ammo`,
+        slot: 'ammo',
+        ammoType: type,
+        amount: dropAmount,
+        x: player.x + (Math.random() - 0.5) * 20,
+        y: player.y + (Math.random() - 0.5) * 20
+      });
+    }
+    player.ammoReserve[type] = 0;
+  }
+}
+```
+
+#### E11i: Update `InputHandler.js` — spacebar for shooting, R for reload
+
+Replace mouse-based shooting with spacebar:
+
+```js
+// In constructor, REMOVE these lines:
+// canvas.addEventListener('mousedown', () => { this.shooting = true; });
+// canvas.addEventListener('mouseup', () => { this.shooting = false; });
+
+// In _onKey(), ADD:
+case 'Space': this.shooting = down; break;
+case 'KeyR': if (down) this._reloadPressed = true; break;
+```
+
+Add reload consumer:
+```js
+// In constructor:
+this._reloadPressed = false;
+
+consumeReload() {
+  if (this._reloadPressed) { this._reloadPressed = false; return true; }
+  return false;
+}
+```
+
+In `main.js`, add:
+```js
+if (inputHandler.consumeReload()) socket.emit('reload');
+```
+
+#### E11j: Update ammo rendering in `Renderer.js`
+
+Add ammo-specific ground item rendering with distinct shapes:
+
+```js
+drawGroundItems(items, cameraX, cameraY, timestamp) {
+  // ... existing setup ...
+  for (const item of items) {
+    if (item.slot === 'ammo') {
+      this._drawAmmoItem(ctx, item, timestamp);
+    } else {
+      this._drawEquipmentItem(ctx, item, timestamp);
+    }
+  }
+}
+
+_drawAmmoItem(ctx, item, timestamp) {
+  const AMMO_COLORS = { pistol: '#aaa', shotgun: '#ff8c42', rifle: '#4a9eff' };
+  const color = AMMO_COLORS[item.ammoType] || '#fff';
+  const glow = 0.2 + 0.1 * Math.sin(timestamp / 400);
+
+  ctx.fillStyle = color;
+  ctx.globalAlpha = glow;
+  ctx.beginPath();
+  ctx.arc(item.x, item.y, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = color;
+  if (item.ammoType === 'pistol') {
+    // Small square
+    ctx.fillRect(item.x - 4, item.y - 4, 8, 8);
+  } else if (item.ammoType === 'shotgun') {
+    // Wide rectangle
+    ctx.fillRect(item.x - 6, item.y - 3, 12, 6);
+  } else if (item.ammoType === 'rifle') {
+    // Diamond
+    ctx.beginPath();
+    ctx.moveTo(item.x, item.y - 5);
+    ctx.lineTo(item.x + 4, item.y);
+    ctx.lineTo(item.x, item.y + 5);
+    ctx.lineTo(item.x - 4, item.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+```
+
+#### E11k: Update HUD to show ammo reserves on right side
+
+Add to `HUD.js`:
+
+```js
+_drawAmmoReserves(ctx, canvasW, canvasH, ammoReserve, equippedGunType) {
+  const x = canvasW - 120;
+  let y = canvasH / 2 - 60;
+  const types = [
+    { key: 'pistol', name: 'Pistol', color: '#aaa' },
+    { key: 'shotgun', name: 'Shotgun', color: '#ff8c42' },
+    { key: 'rifle', name: 'Rifle', color: '#4a9eff' }
+  ];
+
+  ctx.textAlign = 'right';
+  for (const t of types) {
+    const isActive = equippedGunType === t.key;
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(x - 5, y - 12, 110, 22);
+
+    // Ammo type icon
+    ctx.fillStyle = t.color;
+    if (t.key === 'pistol') ctx.fillRect(x, y - 5, 6, 6);
+    else if (t.key === 'shotgun') ctx.fillRect(x - 1, y - 3, 9, 5);
+    else { // diamond
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y - 4);
+      ctx.lineTo(x + 7, y);
+      ctx.lineTo(x + 3, y + 4);
+      ctx.lineTo(x - 1, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Count
+    ctx.fillStyle = isActive ? '#fff' : '#888';
+    ctx.font = isActive ? 'bold 13px sans-serif' : '12px sans-serif';
+    ctx.fillText(`${ammoReserve[t.key] || 0}`, x + 100, y + 4);
+
+    y += 28;
+  }
+}
+```
+
+Call in `HUD.draw()`:
+```js
+const gunType = me.gun ? me.gun.type : null;
+this._drawAmmoReserves(ctx, canvasW, canvasH, me.ammoReserve, gunType);
+```
+
+Also update the gun slot display to show `magAmmo / magSize` instead of just ammo:
+```js
+// In _drawSlot for gun:
+ctx.fillText(`${item.magAmmo} / ${item.magSize}`, cx, cy + 26);
+```
