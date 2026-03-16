@@ -81,14 +81,32 @@ const modeLabel = document.getElementById('modeLabel');
 let currentMode = null;
 
 document.querySelectorAll('.mode-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
     const modeId = btn.dataset.mode;
+    if (!modeId) return;
     currentMode = modeId;
     modeSelect.style.display = 'none';
     lobby.style.display = 'flex';
-    modeLabel.textContent = btn.querySelector('.mode-name').textContent;
+    const nameEl = btn.querySelector('.mode-name');
+    modeLabel.textContent = nameEl ? nameEl.textContent : modeId;
     socket.emit('joinMode', modeId);
   });
+});
+
+// Fallback: also listen on document for mode-btn clicks (in case event delegation is needed)
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mode-btn');
+  if (btn && modeSelect.style.display !== 'none') {
+    const modeId = btn.dataset.mode;
+    if (!modeId || currentMode) return;
+    currentMode = modeId;
+    modeSelect.style.display = 'none';
+    lobby.style.display = 'flex';
+    const nameEl = btn.querySelector('.mode-name');
+    modeLabel.textContent = nameEl ? nameEl.textContent : modeId;
+    socket.emit('joinMode', modeId);
+  }
 });
 
 document.getElementById('backBtn').addEventListener('click', () => {
