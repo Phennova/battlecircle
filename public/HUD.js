@@ -19,6 +19,90 @@ export class HUD {
     }
   }
 
+  drawMinimap(ctx, canvasW, canvasH, map, playerX, playerY, zone, destroyedWalls) {
+    if (!map) return;
+
+    const SIZE = 140;
+    const PADDING = 10;
+    const mx = PADDING;
+    const my = canvasH - SIZE - PADDING - 60; // above health bar area
+    const scale = SIZE / map.width;
+    const destroyed = destroyedWalls ? new Set(destroyedWalls) : new Set();
+
+    // Background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(mx, my, SIZE, SIZE);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(mx, my, SIZE, SIZE);
+
+    // Map floor
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(mx + 1, my + 1, SIZE - 2, SIZE - 2);
+
+    // Buildings (filled rects)
+    ctx.fillStyle = '#353555';
+    for (const b of map.buildings) {
+      ctx.fillRect(mx + b.x * scale, my + b.y * scale, b.w * scale, b.h * scale);
+    }
+
+    // All walls (static walls from map + building walls, minus destroyed)
+    ctx.fillStyle = '#777';
+    let wallIdx = 0;
+    // Map-level walls
+    for (const w of map.walls) {
+      if (!destroyed.has(wallIdx)) {
+        const wx = mx + w.x * scale;
+        const wy = my + w.y * scale;
+        const ww = Math.max(1, w.w * scale);
+        const wh = Math.max(1, w.h * scale);
+        ctx.fillRect(wx, wy, ww, wh);
+      }
+      wallIdx++;
+    }
+    // Building walls
+    for (const b of map.buildings) {
+      for (const w of b.walls) {
+        if (!destroyed.has(wallIdx)) {
+          const wx = mx + w.x * scale;
+          const wy = my + w.y * scale;
+          const ww = Math.max(1, w.w * scale);
+          const wh = Math.max(1, w.h * scale);
+          ctx.fillRect(wx, wy, ww, wh);
+        }
+        wallIdx++;
+      }
+    }
+
+    // Zone circle
+    if (zone && zone.active) {
+      ctx.strokeStyle = 'rgba(255, 50, 50, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(mx + zone.centerX * scale, my + zone.centerY * scale, zone.currentRadius * scale, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Red fill outside zone
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = '#ff0000';
+      ctx.beginPath();
+      ctx.rect(mx, my, SIZE, SIZE);
+      ctx.arc(mx + zone.centerX * scale, my + zone.centerY * scale, zone.currentRadius * scale, 0, Math.PI * 2, true);
+      ctx.fill('evenodd');
+      ctx.restore();
+    }
+
+    // Local player dot
+    ctx.fillStyle = '#4a9eff';
+    ctx.beginPath();
+    ctx.arc(mx + playerX * scale, my + playerY * scale, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
   drawKillFeed(ctx, canvasW, entries, now) {
     const active = entries.filter(e => now - e.time < 5000);
     const x = canvasW - 20;
