@@ -608,7 +608,7 @@ export class GameRoom {
         // Spawn ~25 shrapnel projectiles with random angles and varied speeds
         const SHRAPNEL_COUNT = 45;
         const SHRAPNEL_RANGE = 140; // +75% from original 80
-        const SHRAPNEL_DAMAGE = 5;
+        const SHRAPNEL_DAMAGE = 10;
         const shrapnelWeapon = {
           bulletSpeed: 0, // set per piece
           damage: SHRAPNEL_DAMAGE,
