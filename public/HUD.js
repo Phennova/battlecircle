@@ -17,6 +17,11 @@ export class HUD {
     if (me.healing) {
       this._drawStatusIndicator(ctx, canvasW, canvasH, 'HEALING...', '#50c878');
     }
+
+    // Team scores for TDM
+    if (gameState.teamScores) {
+      this._drawTeamScores(ctx, canvasW, gameState.teamScores, gameState.modeId);
+    }
   }
 
   drawMinimap(ctx, canvasW, canvasH, map, playerX, playerY, zone, destroyedWalls) {
@@ -531,6 +536,32 @@ export class HUD {
     ctx.font = '10px sans-serif';
     ctx.fillStyle = '#444';
     ctx.fillText('E Pickup   G Grenade   H Heal   R Reload   Space Shoot', x, y);
+  }
+
+  _drawTeamScores(ctx, canvasW, scores) {
+    const y = 60;
+    const cx = canvasW / 2;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(cx - 80, y - 12, 160, 28);
+
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textBaseline = 'middle';
+
+    // Blue score
+    ctx.fillStyle = '#4a9eff';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${scores[0]}`, cx - 10, y);
+
+    // Separator
+    ctx.fillStyle = '#555';
+    ctx.textAlign = 'center';
+    ctx.fillText('-', cx, y);
+
+    // Red score
+    ctx.fillStyle = '#ff6b6b';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${scores[1]}`, cx + 10, y);
   }
 
   _drawStatusIndicator(ctx, canvasW, canvasH, text, color) {

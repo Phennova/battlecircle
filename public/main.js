@@ -59,6 +59,35 @@ const tracerTrails = [];
 
 // Player colors
 const COLORS = ['#4a9eff', '#ff6b6b', '#50c878', '#ffc832', '#ff8c42', '#c77dff', '#64dfdf', '#ff5e78'];
+const TEAM_RENDER_COLORS = { blue: '#4a9eff', red: '#ff6b6b' };
+
+function getPlayerColor(player, index) {
+  if (player.team !== undefined && player.team !== null) {
+    const teamName = player.team === 0 ? 'blue' : player.team === 1 ? 'red' : null;
+    if (teamName) return TEAM_RENDER_COLORS[teamName];
+  }
+  return COLORS[index % COLORS.length];
+}
+
+// Mode select
+const modeSelect = document.getElementById('modeSelect');
+const modeLabel = document.getElementById('modeLabel');
+let currentMode = null;
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const modeId = btn.dataset.mode;
+    currentMode = modeId;
+    modeSelect.style.display = 'none';
+    lobby.style.display = 'flex';
+    modeLabel.textContent = btn.querySelector('.mode-name').textContent;
+    socket.emit('joinMode', modeId);
+  });
+});
+
+document.getElementById('backBtn').addEventListener('click', () => {
+  location.reload();
+});
 
 // Lobby UI
 const lobby = document.getElementById('lobby');
@@ -66,6 +95,7 @@ const lobbyStatus = lobby.querySelector('.status');
 const readyBtn = document.getElementById('readyBtn');
 const playerList = document.getElementById('playerList');
 let isReady = false;
+let currentModeConfig = null;
 
 readyBtn.addEventListener('click', () => {
   isReady = !isReady;
@@ -77,6 +107,7 @@ readyBtn.addEventListener('click', () => {
 socket.on('roomJoined', (data) => {
   myId = data.playerId;
   map = data.map;
+  currentModeConfig = data.mode;
   renderer.setMap(map);
   shadowCaster.setWalls(renderer.allWalls);
   lobbyStatus.textContent = 'Waiting for players...';
@@ -85,13 +116,52 @@ socket.on('roomJoined', (data) => {
 
 socket.on('lobbyUpdate', (data) => {
   lobbyStatus.textContent = `${data.count} / ${data.max} players`;
-  // Render player list with ready status
-  playerList.innerHTML = data.players.map(p =>
-    `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin:4px 0;background:rgba(255,255,255,0.05);border-radius:6px">
-      <span style="color:#ccc">${p.name}</span>
-      <span style="color:${p.ready ? '#50c878' : '#888'};font-size:13px">${p.ready ? 'Ready' : 'Not Ready'}</span>
-    </div>`
-  ).join('');
+
+  if (data.teams) {
+    // Team lobby — show team columns with join buttons
+    const blue = data.players.filter(p => p.team === 'blue');
+    const red = data.players.filter(p => p.team === 'red');
+    const unassigned = data.players.filter(p => !p.team);
+
+    playerList.innerHTML = `
+      <div style="display:flex;gap:12px;margin-bottom:8px">
+        <div style="flex:1;text-align:center">
+          <div style="color:#4a9eff;font-weight:bold;margin-bottom:6px">Blue Team</div>
+          <button onclick="window._joinTeam(0)" style="padding:4px 12px;background:rgba(74,158,255,0.2);border:1px solid #4a9eff;color:#4a9eff;border-radius:4px;cursor:pointer;margin-bottom:6px;font-size:12px">Join Blue</button>
+          ${blue.map(p => `<div style="padding:4px 8px;margin:2px 0;background:rgba(74,158,255,0.1);border-radius:4px;font-size:13px">
+            <span style="color:#4a9eff">${p.name}</span>
+            <span style="color:${p.ready ? '#50c878' : '#555'};font-size:11px;float:right">${p.ready ? 'Ready' : ''}</span>
+          </div>`).join('')}
+        </div>
+        <div style="flex:1;text-align:center">
+          <div style="color:#ff6b6b;font-weight:bold;margin-bottom:6px">Red Team</div>
+          <button onclick="window._joinTeam(1)" style="padding:4px 12px;background:rgba(255,107,107,0.2);border:1px solid #ff6b6b;color:#ff6b6b;border-radius:4px;cursor:pointer;margin-bottom:6px;font-size:12px">Join Red</button>
+          ${red.map(p => `<div style="padding:4px 8px;margin:2px 0;background:rgba(255,107,107,0.1);border-radius:4px;font-size:13px">
+            <span style="color:#ff6b6b">${p.name}</span>
+            <span style="color:${p.ready ? '#50c878' : '#555'};font-size:11px;float:right">${p.ready ? 'Ready' : ''}</span>
+          </div>`).join('')}
+        </div>
+      </div>
+      ${unassigned.length > 0 ? `<div style="color:#888;font-size:12px;text-align:center">${unassigned.map(p => p.name).join(', ')} - pick a team</div>` : ''}
+    `;
+  } else {
+    // FFA lobby
+    playerList.innerHTML = data.players.map(p =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin:4px 0;background:rgba(255,255,255,0.05);border-radius:6px">
+        <span style="color:#ccc">${p.name}</span>
+        <span style="color:${p.ready ? '#50c878' : '#888'};font-size:13px">${p.ready ? 'Ready' : 'Not Ready'}</span>
+      </div>`
+    ).join('');
+  }
+});
+
+// Team join handler (called from inline onclick)
+window._joinTeam = (teamIndex) => {
+  socket.emit('joinTeam', teamIndex);
+  isReady = false;
+  readyBtn.textContent = 'Ready Up';
+  readyBtn.style.background = '#555';
+};
 });
 
 socket.on('countdown', (data) => {
@@ -144,31 +214,42 @@ socket.on('playerKilled', (data) => {
   killFeed.push({ ...data, time: performance.now() });
 
   if (data.victimId === myId) {
-    dead = true;
-    deathTime = performance.now();
-    // Show brief elimination overlay
-    const overlay = document.getElementById('overlay');
-    overlay.style.display = 'flex';
-    const survivalMs = gameState ? gameState.gameElapsedMs : 0;
-    const myData = gameState ? gameState.players.find(p => p.id === myId) : null;
-    const kills = myData ? myData.kills : 0;
-    const sec = Math.floor(survivalMs / 1000);
-    overlay.innerHTML = `
-      <h1 style="font-size:48px;color:#ff4444;letter-spacing:4px">ELIMINATED</h1>
-      <p style="color:#aaa;margin:8px">Survived: ${Math.floor(sec/60)}m ${sec%60}s</p>
-      <p style="color:#aaa;margin:8px">Kills: ${kills}</p>
-    `;
-    // After 2 seconds, switch to spectator mode
-    setTimeout(() => {
-      if (!gameOverData) {
-        overlay.style.display = 'none';
-        spectating = true;
-        const alivePlayers = gameState ? gameState.players.filter(p => p.alive && p.id !== myId) : [];
-        if (alivePlayers.length > 0) {
-          spectateTargetId = alivePlayers[0].id;
+    const isTDM = currentModeConfig && currentModeConfig.respawn;
+
+    if (isTDM) {
+      // TDM: brief death flash, then wait for respawn
+      dead = true;
+      deathTime = performance.now();
+      const overlay = document.getElementById('overlay');
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `<h1 style="font-size:36px;color:#ff4444">KILLED</h1><p style="color:#888;margin-top:8px">Respawning...</p>`;
+      // Auto-dismiss when respawned (check in game loop)
+    } else {
+      // BR: death -> spectator
+      dead = true;
+      deathTime = performance.now();
+      const overlay = document.getElementById('overlay');
+      overlay.style.display = 'flex';
+      const survivalMs = gameState ? gameState.gameElapsedMs : 0;
+      const myData = gameState ? gameState.players.find(p => p.id === myId) : null;
+      const kills = myData ? myData.kills : 0;
+      const sec = Math.floor(survivalMs / 1000);
+      overlay.innerHTML = `
+        <h1 style="font-size:48px;color:#ff4444;letter-spacing:4px">ELIMINATED</h1>
+        <p style="color:#aaa;margin:8px">Survived: ${Math.floor(sec/60)}m ${sec%60}s</p>
+        <p style="color:#aaa;margin:8px">Kills: ${kills}</p>
+      `;
+      setTimeout(() => {
+        if (!gameOverData) {
+          overlay.style.display = 'none';
+          spectating = true;
+          const alivePlayers = gameState ? gameState.players.filter(p => p.alive && p.id !== myId) : [];
+          if (alivePlayers.length > 0) {
+            spectateTargetId = alivePlayers[0].id;
+          }
         }
-      }
-    }, 2000);
+      }, 2000);
+    }
   }
 });
 
@@ -179,24 +260,43 @@ socket.on('gameOver', (data) => {
   const overlay = document.getElementById('overlay');
   overlay.style.display = 'flex';
 
-  const isWinner = data.winnerId === myId;
-  const title = isWinner
-    ? '<h1 style="font-size:48px;color:#ffc832;letter-spacing:4px;margin-bottom:16px">VICTORY</h1>'
-    : '<h1 style="font-size:36px;color:#ff4444;letter-spacing:4px;margin-bottom:16px">GAME OVER</h1>';
+  // Determine title
+  let title;
+  if (data.winningTeam) {
+    // TDM mode
+    const me = gameState ? gameState.players.find(p => p.id === myId) : null;
+    const myTeam = me ? (me.team === 0 ? 'blue' : 'red') : null;
+    const won = myTeam === data.winningTeam;
+    const teamColor = data.winningTeam === 'blue' ? '#4a9eff' : '#ff6b6b';
+    title = won
+      ? `<h1 style="font-size:48px;color:#ffc832;letter-spacing:4px;margin-bottom:8px">VICTORY</h1>
+         <div style="color:${teamColor};font-size:18px;margin-bottom:8px">${data.winningTeam.toUpperCase()} TEAM WINS</div>
+         <div style="color:#888;font-size:16px;margin-bottom:16px">${data.teamScores[0]} - ${data.teamScores[1]}</div>`
+      : `<h1 style="font-size:36px;color:#ff4444;letter-spacing:4px;margin-bottom:8px">DEFEAT</h1>
+         <div style="color:${teamColor};font-size:18px;margin-bottom:8px">${data.winningTeam.toUpperCase()} TEAM WINS</div>
+         <div style="color:#888;font-size:16px;margin-bottom:16px">${data.teamScores[0]} - ${data.teamScores[1]}</div>`;
+  } else {
+    const isWinner = data.winnerId === myId;
+    title = isWinner
+      ? '<h1 style="font-size:48px;color:#ffc832;letter-spacing:4px;margin-bottom:16px">VICTORY</h1>'
+      : '<h1 style="font-size:36px;color:#ff4444;letter-spacing:4px;margin-bottom:16px">GAME OVER</h1>';
+  }
 
   let leaderboardHTML = '';
   if (data.standings && data.standings.length > 0) {
     const me = gameState ? gameState.players.find(p => p.id === myId) : null;
     const myName = me ? me.name : '';
+    const hasPlacements = data.standings[0].placement !== undefined;
+    const hasTeams = data.standings[0].team !== undefined;
+
     const rows = data.standings.map(p => {
       const isMe = p.name === myName;
-      const isFirst = p.placement === 1;
-      const rowBg = isFirst ? 'rgba(255,200,50,0.15)' : isMe ? 'rgba(74,158,255,0.1)' : 'rgba(255,255,255,0.03)';
-      const rowBorder = isFirst ? '1px solid rgba(255,200,50,0.3)' : isMe ? '1px solid rgba(74,158,255,0.2)' : 'none';
-      const nameColor = isFirst ? '#ffc832' : '#ccc';
-      return `<tr style="background:${rowBg};border:${rowBorder}">
-        <td style="padding:6px 12px;color:#888">${p.placement}</td>
-        <td style="padding:6px 12px;color:${nameColor}">${p.name}</td>
+      const teamColor = p.team === 'blue' ? '#4a9eff' : p.team === 'red' ? '#ff6b6b' : '#ccc';
+      const rowBg = isMe ? 'rgba(74,158,255,0.1)' : 'rgba(255,255,255,0.03)';
+      return `<tr style="background:${rowBg}">
+        ${hasPlacements ? `<td style="padding:6px 12px;color:#888">${p.placement}</td>` : ''}
+        ${hasTeams ? `<td style="padding:6px 12px;color:${teamColor};font-size:11px">${(p.team || '').toUpperCase()}</td>` : ''}
+        <td style="padding:6px 12px;color:${isMe ? '#fff' : '#ccc'}">${p.name}</td>
         <td style="padding:6px 12px;text-align:center;color:#ccc">${p.kills}</td>
         <td style="padding:6px 12px;text-align:center;color:#ccc">${p.damageDealt}</td>
       </tr>`;
@@ -206,7 +306,8 @@ socket.on('gameOver', (data) => {
       <table style="border-collapse:collapse;margin:16px 0;font-size:13px;font-family:sans-serif;min-width:360px">
         <thead>
           <tr style="border-bottom:1px solid #444">
-            <th style="padding:6px 12px;color:#888;text-align:left">#</th>
+            ${hasPlacements ? '<th style="padding:6px 12px;color:#888;text-align:left">#</th>' : ''}
+            ${hasTeams ? '<th style="padding:6px 12px;color:#888;text-align:left">Team</th>' : ''}
             <th style="padding:6px 12px;color:#888;text-align:left">Name</th>
             <th style="padding:6px 12px;color:#888;text-align:center">Kills</th>
             <th style="padding:6px 12px;color:#888;text-align:center">Damage</th>
@@ -329,6 +430,16 @@ function loop(timestamp) {
     const me = gameState.players.find(p => p.id === myId);
     let viewX, viewY;
     let isScoping = false;
+
+    // Detect respawn in TDM
+    if (dead && me && me.alive && currentModeConfig && currentModeConfig.respawn) {
+      dead = false;
+      deathTime = null;
+      predictedX = me.x;
+      predictedY = me.y;
+      inputBuffer.length = 0;
+      document.getElementById('overlay').style.display = 'none';
+    }
 
     if (!dead && me && me.alive) {
       // Normal gameplay
@@ -558,12 +669,12 @@ function loop(timestamp) {
         const interp = getInterpolatedPlayer(p.id);
         if (shadowCaster.isVisible(interp.x, interp.y, visibility)) {
           const otherGunType = interp.gun ? interp.gun.type : null;
-          renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, COLORS[i % COLORS.length], interp.health, PLAYER_HP, otherGunType, interp.name);
+          renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, getPlayerColor(p || interp, i), interp.health, PLAYER_HP, otherGunType, interp.name);
         }
       });
 
       const myGunType = me.gun ? me.gun.type : null;
-      renderer.drawPlayer(viewX, viewY, inp.angle, PLAYER_RADIUS, COLORS[playerIndex % COLORS.length], me.health, PLAYER_HP, myGunType, me.name);
+      renderer.drawPlayer(viewX, viewY, inp.angle, PLAYER_RADIUS, getPlayerColor(me, playerIndex), me.health, PLAYER_HP, myGunType, me.name);
 
       ctx.restore();
 
@@ -639,7 +750,7 @@ function loop(timestamp) {
           const interp = getInterpolatedPlayer(p.id);
           if (shadowCaster.isVisible(interp.x, interp.y, visibility)) {
             const gunType = interp.gun ? interp.gun.type : null;
-            renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, COLORS[i % COLORS.length], interp.health, PLAYER_HP, gunType, interp.name);
+            renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, getPlayerColor(p || interp, i), interp.health, PLAYER_HP, gunType, interp.name);
           }
         });
         ctx.restore();

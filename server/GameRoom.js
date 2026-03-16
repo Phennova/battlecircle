@@ -5,8 +5,11 @@ import { generateName } from './names.js';
 import { resolveAgainstWalls } from '../shared/collision.js';
 import { PLAYER_RADIUS, BULLET_RADIUS, PICKUP_RANGE, TICK_INTERVAL } from '../shared/constants.js';
 import { WEAPONS, AMMO_TYPES } from '../shared/weapons.js';
+import { GAME_MODES } from '../shared/gameModes.js';
 
 const STATES = { WAITING: 'WAITING', COUNTDOWN: 'COUNTDOWN', ACTIVE: 'ACTIVE', ENDED: 'ENDED' };
+
+const TEAM_COLORS = ['blue', 'red'];
 
 const LOOT_TABLE = [
   { type: 'pistol', slot: 'gun', weight: 16 },
@@ -28,11 +31,15 @@ const ITEMS_PER_SLOT = 2;
 let nextItemId = 0;
 
 export class GameRoom {
-  constructor(id, map, io) {
+  constructor(id, map, io, modeId = 'battle_royale') {
     this.id = id;
     this.map = map;
     this.io = io;
+    this.modeId = modeId;
+    this.mode = GAME_MODES[modeId];
     this.state = STATES.WAITING;
+    this.teamScores = this.mode.teams ? [0, 0] : null;
+    this.respawnQueue = []; // { playerId, respawnAt }
     this.players = new Map();
     this.bullets = [];
     this.grenades = [];
@@ -101,13 +108,23 @@ export class GameRoom {
     const name = generateName(this.usedNames);
     this.usedNames.add(name);
     const player = new Player(socket.id, spawn.x, spawn.y, name);
+
+    // Assign team for team modes
+    if (this.mode.teams) {
+      const teamCounts = [0, 0];
+      this.players.forEach(p => { if (p.team !== undefined) teamCounts[p.team]++; });
+      player.team = teamCounts[0] <= teamCounts[1] ? 0 : 1;
+    }
+
     this.players.set(socket.id, player);
     socket.join(this.id);
 
     socket.emit('roomJoined', {
       roomId: this.id,
       playerId: socket.id,
-      map: this.map
+      map: this.map,
+      modeId: this.modeId,
+      mode: this.mode
     });
 
     socket.on('playerInput', (data) => {
@@ -118,9 +135,23 @@ export class GameRoom {
       }
     });
 
+    socket.on('joinTeam', (teamIndex) => {
+      const p = this.players.get(socket.id);
+      if (!p || this.state !== STATES.WAITING || !this.mode.teams) return;
+      if (teamIndex !== 0 && teamIndex !== 1) return;
+      // Check team isn't full
+      const teamCount = [...this.players.values()].filter(pl => pl.team === teamIndex).length;
+      if (teamCount >= this.mode.teamSize) return;
+      p.team = teamIndex;
+      p.ready = false; // must re-ready after switching
+      this._broadcastLobby();
+    });
+
     socket.on('toggleReady', () => {
       const p = this.players.get(socket.id);
       if (!p || this.state !== STATES.WAITING) return;
+      // In team mode, must have a team to ready up
+      if (this.mode.teams && p.team === undefined) return;
       p.ready = !p.ready;
       this._broadcastLobby();
       this._checkAllReady();
@@ -277,17 +308,28 @@ export class GameRoom {
   _broadcastLobby() {
     const playerList = [];
     this.players.forEach((p) => {
-      playerList.push({ name: p.name, ready: p.ready || false });
+      playerList.push({
+        name: p.name,
+        ready: p.ready || false,
+        team: p.team !== undefined ? TEAM_COLORS[p.team] : null
+      });
     });
     this.io.to(this.id).emit('lobbyUpdate', {
       players: playerList,
       count: this.players.size,
-      max: 8
+      max: this.mode.maxPlayers,
+      modeId: this.modeId,
+      teams: this.mode.teams
     });
   }
 
   _checkAllReady() {
-    if (this.players.size < 2) return;
+    if (this.players.size < this.mode.minPlayers) return;
+    // In team modes, all players must have a team
+    if (this.mode.teams) {
+      const allTeamed = [...this.players.values()].every(p => p.team !== undefined);
+      if (!allTeamed) return;
+    }
     const allReady = [...this.players.values()].every(p => p.ready);
     if (allReady) {
       this._startCountdown();
@@ -547,8 +589,11 @@ export class GameRoom {
       }
 
       let hitPlayer = false;
+      const bulletOwner = this.players.get(bullet.ownerId);
       this.players.forEach((player) => {
         if (hitPlayer || !player.alive || player.id === bullet.ownerId) return;
+        // Block friendly fire in team modes
+        if (this.mode.teams && bulletOwner && bulletOwner.team === player.team) return;
         const dx = bullet.x - player.x;
         const dy = bullet.y - player.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -566,17 +611,7 @@ export class GameRoom {
           }
 
           if (player.health <= 0) {
-            player.health = 0;
-            player.alive = false;
-            if (attacker) attacker.kills++;
-            this._recordElimination(player);
-            this._dropItems(player);
-            this.io.to(this.id).emit('playerKilled', {
-              victimId: player.id, killerId: bullet.ownerId,
-              victimName: player.name, killerName: attacker ? attacker.name : 'Unknown',
-              cause: bullet.type === 'shrapnel' ? 'frag' : bullet.type
-            });
-            this._checkWin();
+            this._handleKill(player, bullet.ownerId, bullet.type === 'shrapnel' ? 'frag' : bullet.type);
           }
         }
       });
@@ -682,22 +717,18 @@ export class GameRoom {
         if (dist > this.zone.currentRadius) {
           player.health -= this.zone.damagePerSecond * dt;
           if (player.health <= 0) {
-            player.health = 0;
-            player.alive = false;
-            this._recordElimination(player);
-            this._dropItems(player);
-            this.io.to(this.id).emit('playerKilled', {
-              victimId: player.id, killerId: null,
-              victimName: player.name, killerName: null,
-              cause: 'zone'
-            });
-            this._checkWin();
+            this._handleKill(player, null, 'zone');
           }
         }
       });
     }
 
-    // 8. Broadcast state
+    // 8. Process respawns
+    if (this.mode.respawn) {
+      this._processRespawns(now);
+    }
+
+    // 9. Broadcast state
     this._broadcastState();
   }
 
@@ -725,6 +756,8 @@ export class GameRoom {
       smokes: this.smokes.map(s => ({ id: s.id, x: s.x, y: s.y, activatedAt: s.activatedAt, duration: s.duration })),
       doors: this.doors.map(d => ({ id: d.id, x: d.wallRect.x, y: d.wallRect.y, w: d.wallRect.w, h: d.wallRect.h, open: d.open, side: d.side })),
       destroyedWalls: [...this.destroyedWalls],
+      teamScores: this.teamScores,
+      modeId: this.modeId,
       zone: {
         active: this.zone.active,
         centerX: this.zone.centerX,
@@ -737,6 +770,63 @@ export class GameRoom {
     };
 
     this.io.to(this.id).emit('gameState', snapshot);
+  }
+
+  _handleKill(player, killerId, cause) {
+    player.health = 0;
+    player.alive = false;
+
+    const attacker = killerId ? this.players.get(killerId) : null;
+    if (attacker) attacker.kills++;
+
+    // Team score
+    if (this.mode.teams && attacker && attacker.team !== undefined) {
+      this.teamScores[attacker.team]++;
+    }
+
+    this.io.to(this.id).emit('playerKilled', {
+      victimId: player.id, killerId,
+      victimName: player.name,
+      killerName: attacker ? attacker.name : null,
+      cause
+    });
+
+    if (this.mode.respawn) {
+      // Queue respawn
+      this.respawnQueue.push({
+        playerId: player.id,
+        respawnAt: Date.now() + this.mode.respawnTime
+      });
+    } else {
+      this._recordElimination(player);
+      this._dropItems(player);
+    }
+
+    this._checkWin();
+  }
+
+  _processRespawns(now) {
+    for (let i = this.respawnQueue.length - 1; i >= 0; i--) {
+      const entry = this.respawnQueue[i];
+      if (now >= entry.respawnAt) {
+        const player = this.players.get(entry.playerId);
+        if (player) {
+          const spawn = this._pickSpawn();
+          player.x = spawn.x;
+          player.y = spawn.y;
+          player.health = 100;
+          player.alive = true;
+          player.healing = false;
+          player.healingUntil = 0;
+          player.reloading = false;
+          player.reloadingUntil = 0;
+          // Give a starter pistol on respawn
+          player.gun = { type: 'pistol', magAmmo: WEAPONS.pistol.magSize };
+          player.ammoReserve = { light: 24, shells: 0, heavy: 0 };
+        }
+        this.respawnQueue.splice(i, 1);
+      }
+    }
   }
 
   _recordElimination(player) {
@@ -805,8 +895,36 @@ export class GameRoom {
   }
 
   _checkWin() {
+    if (this.state !== STATES.ACTIVE) return;
+
+    // TDM: check team scores
+    if (this.mode.teams && this.mode.scoreToWin) {
+      for (let t = 0; t < this.teamScores.length; t++) {
+        if (this.teamScores[t] >= this.mode.scoreToWin) {
+          this.state = STATES.ENDED;
+          clearInterval(this.tickInterval);
+          const winningTeam = TEAM_COLORS[t];
+          const standings = [...this.players.values()].map(p => ({
+            name: p.name,
+            team: TEAM_COLORS[p.team] || '?',
+            kills: p.kills,
+            damageDealt: Math.round(p.damageDealt)
+          })).sort((a, b) => b.kills - a.kills);
+          this.io.to(this.id).emit('gameOver', {
+            winnerId: null,
+            winningTeam,
+            teamScores: this.teamScores,
+            standings
+          });
+          return;
+        }
+      }
+      return; // TDM doesn't use last-alive win condition
+    }
+
+    // Battle Royale: last alive wins
     const alive = [...this.players.values()].filter(p => p.alive);
-    if (alive.length <= 1 && this.state === STATES.ACTIVE) {
+    if (alive.length <= 1) {
       this.state = STATES.ENDED;
       clearInterval(this.tickInterval);
       const winner = alive.length === 1 ? alive[0] : null;
@@ -846,6 +964,6 @@ export class GameRoom {
     return true;
   }
 
-  get isFull() { return this.players.size >= 8; }
+  get isFull() { return this.players.size >= this.mode.maxPlayers; }
   get isEmpty() { return this.players.size === 0; }
 }

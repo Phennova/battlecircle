@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { GameRoom } from './GameRoom.js';
 import { generateMap } from './mapGenerator.js';
+import { GAME_MODES } from '../shared/gameModes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,34 +17,67 @@ const io = new Server(httpServer);
 app.use('/shared', express.static(join(__dirname, '..', 'shared')));
 app.use(express.static(join(__dirname, '..', 'public')));
 
-// Room management — each room gets a fresh generated map
-let currentRoom = null;
-const rooms = new Map();
+// Room management — one waiting room per mode
+const rooms = new Map(); // roomId -> GameRoom
+const waitingRooms = new Map(); // modeId -> roomId
 
-function getOrCreateRoom() {
-  if (currentRoom && !currentRoom.isFull && currentRoom.state === 'WAITING') {
-    return currentRoom;
+function getOrCreateRoom(modeId) {
+  const mode = GAME_MODES[modeId];
+  if (!mode) return null;
+
+  // Check for existing waiting room for this mode
+  const existingId = waitingRooms.get(modeId);
+  if (existingId) {
+    const room = rooms.get(existingId);
+    if (room && !room.isFull && room.state === 'WAITING') {
+      return room;
+    }
+    // Room is full or started, clear it
+    waitingRooms.delete(modeId);
   }
-  const id = `room_${Date.now()}`;
+
+  const id = `${modeId}_${Date.now()}`;
   const mapData = generateMap();
-  console.log(`Generated new map: ${mapData.buildings.length} buildings, ${mapData.walls.length - 4} barricades`);
-  const room = new GameRoom(id, mapData, io);
+  console.log(`[${modeId}] New room ${id}: ${mapData.buildings.length} buildings`);
+  const room = new GameRoom(id, mapData, io, modeId);
   rooms.set(id, room);
-  currentRoom = room;
+  waitingRooms.set(modeId, id);
   return room;
+}
+
+function cleanupRooms() {
+  rooms.forEach((room, id) => {
+    if (room.isEmpty && room.state !== 'WAITING') {
+      rooms.delete(id);
+      // Clear waiting room ref if it points to this room
+      waitingRooms.forEach((roomId, modeId) => {
+        if (roomId === id) waitingRooms.delete(modeId);
+      });
+    }
+  });
 }
 
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`);
-  const room = getOrCreateRoom();
-  room.addPlayer(socket);
+
+  socket.on('joinMode', (modeId) => {
+    if (!GAME_MODES[modeId]) {
+      socket.emit('error', { message: 'Invalid game mode' });
+      return;
+    }
+
+    const room = getOrCreateRoom(modeId);
+    if (!room) {
+      socket.emit('error', { message: 'Could not create room' });
+      return;
+    }
+
+    room.addPlayer(socket);
+  });
 
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${socket.id}`);
-    rooms.forEach((r, id) => {
-      if (r.isEmpty) rooms.delete(id);
-    });
-    if (currentRoom && currentRoom.isEmpty) currentRoom = null;
+    cleanupRooms();
   });
 });
 

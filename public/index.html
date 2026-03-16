@@ -6,37 +6,67 @@
   <title>BattleCircle</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; }
+    body { background: #000; overflow: hidden; font-family: sans-serif; }
     canvas#game {
       display: block;
       width: 100vw;
       height: 100vh;
     }
-    #lobby {
+
+    /* Mode select screen */
+    #modeSelect {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      background: #0a0a1a;
+      color: #fff;
+      z-index: 20;
+    }
+    #modeSelect h1 { font-size: 52px; margin-bottom: 8px; letter-spacing: 2px; }
+    #modeSelect .subtitle { color: #666; margin-bottom: 32px; font-size: 14px; }
+    .mode-list { display: flex; flex-direction: column; gap: 10px; min-width: 340px; }
+    .mode-btn {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 20px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      font-size: 15px;
+    }
+    .mode-btn:hover { background: rgba(74,158,255,0.1); border-color: rgba(74,158,255,0.3); }
+    .mode-btn .mode-name { font-weight: 600; }
+    .mode-btn .mode-info { color: #888; font-size: 12px; }
+    .mode-btn .mode-players { color: #555; font-size: 12px; }
+
+    /* Lobby */
+    #lobby {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       background: rgba(0,0,0,0.85);
       color: #fff;
-      font-family: sans-serif;
       z-index: 10;
     }
-    #lobby h1 { font-size: 48px; margin-bottom: 20px; }
-    #lobby .status { color: #888; margin-bottom: 20px; }
+    #lobby h1 { font-size: 48px; margin-bottom: 4px; }
+    #lobby .mode-label { color: #4a9eff; font-size: 14px; margin-bottom: 16px; }
+    #lobby .status { color: #888; margin-bottom: 16px; }
     #lobby button {
-      padding: 12px 32px;
-      font-size: 18px;
-      background: #4a9eff;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
+      padding: 12px 32px; font-size: 18px;
+      background: #4a9eff; color: #fff;
+      border: none; border-radius: 8px; cursor: pointer;
     }
     #lobby button:hover { background: #3a8eef; }
     #lobby button:disabled { background: #555; cursor: not-allowed; }
+
     #overlay {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
@@ -48,19 +78,65 @@
       padding: 40px 20px;
       background: rgba(0,0,0,0.7);
       color: #fff;
-      font-family: sans-serif;
       z-index: 10;
     }
+
+    .back-btn {
+      position: absolute; top: 16px; left: 16px;
+      padding: 8px 16px; background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+      color: #aaa; cursor: pointer; font-size: 13px;
+    }
+    .back-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
   </style>
 </head>
 <body>
   <canvas id="game"></canvas>
-  <div id="lobby">
+
+  <div id="modeSelect">
     <h1>BattleCircle</h1>
+    <div class="subtitle">Select a game mode</div>
+    <div class="mode-list">
+      <div class="mode-btn" data-mode="battle_royale">
+        <div>
+          <div class="mode-name">Battle Royale</div>
+          <div class="mode-info">Free-for-all, last one standing</div>
+        </div>
+        <div class="mode-players">2-8 players</div>
+      </div>
+      <div class="mode-btn" data-mode="tdm_2v2">
+        <div>
+          <div class="mode-name">Team Deathmatch 2v2</div>
+          <div class="mode-info">First team to 20 kills</div>
+        </div>
+        <div class="mode-players">4 players</div>
+      </div>
+      <div class="mode-btn" data-mode="tdm_3v3">
+        <div>
+          <div class="mode-name">Team Deathmatch 3v3</div>
+          <div class="mode-info">First team to 20 kills</div>
+        </div>
+        <div class="mode-players">6 players</div>
+      </div>
+      <div class="mode-btn" data-mode="tdm_4v4">
+        <div>
+          <div class="mode-name">Team Deathmatch 4v4</div>
+          <div class="mode-info">First team to 20 kills</div>
+        </div>
+        <div class="mode-players">8 players</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="lobby">
+    <button class="back-btn" id="backBtn">Back</button>
+    <h1>BattleCircle</h1>
+    <div class="mode-label" id="modeLabel"></div>
     <div class="status">Connecting...</div>
-    <div id="playerList" style="margin:16px 0;min-width:240px"></div>
+    <div id="playerList" style="margin:16px 0;min-width:280px"></div>
     <button id="readyBtn" disabled style="padding:12px 32px;font-size:18px;background:#555;color:#fff;border:none;border-radius:8px;cursor:pointer">Ready Up</button>
   </div>
+
   <div id="overlay"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="main.js"></script>

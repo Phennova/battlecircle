@@ -38,6 +38,7 @@ export class Player {
 
     // Stats
     this.ready = false;
+    this.team = undefined; // set by GameRoom for team modes
     this.kills = 0;
     this.damageDealt = 0;
     this.placement = 0;
@@ -59,7 +60,8 @@ export class Player {
       ammoReserve: this.ammoReserve,
       healing: this.healing,
       reloading: this.reloading,
-      kills: this.kills
+      kills: this.kills,
+      team: this.team
     };
   }
 }
