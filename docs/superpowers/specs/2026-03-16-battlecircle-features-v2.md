@@ -34,6 +34,10 @@ A batch of features to add depth and polish to the core BattleCircle game. All f
 
 ### Data
 - Server includes `cause` in `playerKilled` event: the weapon type string (e.g. "pistol", "shotgun", "rifle", "smg", "sniper", "frag") or "zone" for zone deaths, or "disconnect" for disconnects
+- Kill feed format for special cases:
+  - Zone: `VictimName died to the zone` (no killer)
+  - Disconnect: `VictimName disconnected` (no killer)
+  - Grenade: `KillerName [frag] VictimName`
 - Client maintains a `killFeed` array, pushes new entries on `playerKilled`, removes entries older than 5 seconds each frame
 
 ### Rendering
@@ -55,7 +59,8 @@ A batch of features to add depth and polish to the core BattleCircle game. All f
 | Spread | Random ±0.08 rad per bullet |
 | Color | #e8e82e (yellow) |
 
-- Each bullet gets a random angle offset within ±0.08 radians from aim direction
+- Each bullet gets a random angle offset within ±0.08 radians from aim direction (NOT the shotgun's evenly-distributed pellet spread — this is random per individual bullet)
+- Implementation note: SMG has `pellets: 1` and `spread: 0.08`. The shooting code must apply random spread for single-pellet weapons with nonzero spread: `angle += (Math.random() - 0.5) * 2 * weapon.spread`. This differs from the shotgun's `pellets > 1` even-distribution path.
 - High rate of fire + random spread = spray weapon, strong close range, weak at distance
 - Added to loot table with weight 10
 
@@ -77,10 +82,19 @@ A batch of features to add depth and polish to the core BattleCircle game. All f
 - If spacebar is tapped quickly (held < 100ms), fires without zooming (hip-fire)
 - Other guns are unaffected — they still fire normally on spacebar hold
 
+**Sniper input protocol:**
+- The sniper mechanic is handled client-side. `InputHandler` tracks spacebar hold start time.
+- When the equipped weapon is a sniper:
+  - Client does NOT set `shooting: true` while spacebar is held. Instead it tracks `scopeStartTime`.
+  - On spacebar release, client emits a new `sniperFire { angle }` event to the server.
+  - Server handles `sniperFire` like a single shot: checks has sniper, has ammo, cooldown elapsed. Creates one bullet.
+- `ShadowCaster.computeVisibility()` must accept a `visionRange` parameter instead of using the hardcoded constant. Client passes 600-1000 based on scope state. Performance at 1000px is acceptable — the map has ~70 total wall segments and filtering by range keeps it under 40 even at max scope.
+
 **Tracer rounds:**
 - Sniper bullets leave a visible tracer line from the fire position to the current bullet position
 - Tracer rendered as a bright line that fades over 500ms after the bullet is gone
-- All players can see the tracer if it's in their visibility polygon — reveals the sniper's position
+- Tracers are rendered as simple lines clipped to the screen — no polygon clipping needed. If the origin is off-screen but the bullet is visible, the line just extends off-screen (canvas clips it naturally).
+- Tracer data: bullet snapshot gains `originX, originY` fields for sniper bullets only
 
 ### New Ammo Types
 | Ammo Type | For Weapon | Per Pickup | Ground Color | Ground Shape |
@@ -93,10 +107,11 @@ A batch of features to add depth and polish to the core BattleCircle game. All f
 
 ### MedKit
 - Added to heal slot alongside bandages (swap on pickup, same slot)
-- 75 HP heal, 4 second channel time, 1 per slot
+- 75 HP heal, 4 second channel time, max stack: 1 (picking up another when you have one is ignored)
 - Added to loot table with weight 6
+- HUD shows "MedKit" label with a red cross icon (vs bandage's green cross)
 
-### Updated Loot Table Weights
+### Updated Loot Table Weights (complete replacement — supersedes all previous tables)
 | Item | Weight |
 |---|---|
 | Pistol | 16 |
@@ -142,6 +157,12 @@ Applies to ALL heal items (bandage and medkit):
 **Changes from current behavior:**
 - Currently: moving or shooting cancels the heal
 - New: healing is uncancellable, player moves at 30% speed
+- Reloading is unchanged — still cancelled by movement (reloading is a shorter commitment and should remain cancellable)
+
+### ammoReserve Extension
+- `Player.ammoReserve` must be extended to `{ pistol: 0, shotgun: 0, rifle: 0, smg: 0, sniper: 0 }`
+- HUD ammo reserves display must show all 5 types
+- `_dropItems` must drop all 5 ammo types on death
 
 ## 5. Smoke Grenades
 
@@ -155,9 +176,11 @@ Applies to ALL heal items (bandage and medkit):
 
 ### Visibility Blocking
 - Smoke cloud is treated as a **circular vision blocker** for the shadow casting algorithm
-- Implementation: when computing visibility polygon, add wall segments approximating the smoke circle (e.g. 12-sided polygon inscribed in the circle, converted to line segments)
-- Players inside smoke have their vision range reduced to **40px** (can barely see around themselves)
-- Players outside smoke cannot see through it — it blocks line of sight like a wall
+- Implementation: when computing visibility polygon, add wall segments approximating the smoke circle (12-sided polygon inscribed in the 120px radius circle, converted to 12 line segments). `ShadowCaster` gets an `addTemporaryBlockers(smokes)` method that appends these segments before computing visibility and removes them after.
+- **"Inside smoke" definition:** player center is within the 120px radius of any active smoke cloud
+- **Players inside smoke:** vision range reduced to **40px** (pass 40 as visionRange to computeVisibility). They can see a tiny area around themselves but nothing beyond. The smoke polygon segments still block vision normally — they just can barely see past the edge.
+- **Players outside smoke:** smoke polygon blocks line of sight like a wall. They cannot see players on the other side.
+- Multiple overlapping smoke clouds are independent — each adds its own 12-sided polygon. They don't merge.
 
 ### Rendering
 - Animated semi-transparent grey cloud with slow swirling motion
@@ -200,9 +223,18 @@ Applies to ALL heal items (bandage and medkit):
 - If spectating when game ends, show the victory/leaderboard screen for all players
 
 ### Implementation
-- Entirely client-side. No server changes needed.
+- Primarily client-side. No new server events needed — the client already receives `gameState` with all players.
+- Key client-side changes required:
+  - Do NOT set `gameActive = false` on death. Instead set a `dead` flag. The game loop must keep running to receive `gameState` and render the spectated view.
+  - Remove the `canvas.style.filter = 'grayscale(100%)'` on death (spectator should see normal colors).
+  - Dismiss the ELIMINATED overlay after 2 seconds and switch to spectator rendering.
 - Client stores `spectating: true` and `spectateTargetId` state
-- Game loop uses spectated player's position instead of predicted position for rendering
+- Game loop uses spectated player's position instead of predicted position for camera and shadow casting
+
+### HUD: Grenade Slot Display
+- When carrying frags: show frag icon with "Frag" label
+- When carrying smokes: show smoke cloud icon (grey swirl) with "Smoke" label
+- Read `grenade.type` from player state to determine which to display
 
 ## 7. Leaderboard (End Screen)
 
@@ -210,7 +242,8 @@ Applies to ALL heal items (bandage and medkit):
 - `Player` gains: `placement` (number, set when eliminated), `damageDealt` (running total)
 - When a player dies: `player.placement = currentAlivePlayers + 1` (so last to die = 2nd, winner = 1st)
 - When a player deals damage (bullet hit, grenade hit): `attacker.damageDealt += damage`
-- `gameOver` event includes `standings` array: all players sorted by placement
+- **Disconnected players:** set placement before deleting from the players map. Store eliminated player data in a separate `finishedPlayers` array on GameRoom so standings survive disconnection.
+- `gameOver` event includes `standings` array: all players (including disconnected) sorted by placement
 
 ### `gameOver` Event Update
 ```json
