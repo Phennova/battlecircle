@@ -261,6 +261,69 @@ export class GameRoom {
     }
   }
 
+  _assignSpawnPositions() {
+    const spawns = [...this.map.spawnPoints];
+
+    if (this.mode.teams) {
+      // Pick two spawn areas as far apart as possible
+      let bestDist = 0;
+      let spawnA = spawns[0], spawnB = spawns[1];
+      for (let i = 0; i < spawns.length; i++) {
+        for (let j = i + 1; j < spawns.length; j++) {
+          const d = Math.sqrt((spawns[i].x - spawns[j].x) ** 2 + (spawns[i].y - spawns[j].y) ** 2);
+          if (d > bestDist) { bestDist = d; spawnA = spawns[i]; spawnB = spawns[j]; }
+        }
+      }
+
+      // Team 0 (blue) gets spawns near spawnA, team 1 (red) gets spawns near spawnB
+      const teamAnchors = [spawnA, spawnB];
+
+      this.players.forEach((player) => {
+        const anchor = teamAnchors[player.team] || teamAnchors[0];
+        // Find closest available spawn to team anchor
+        const sortedSpawns = spawns
+          .map(sp => ({ sp, dist: Math.sqrt((sp.x - anchor.x) ** 2 + (sp.y - anchor.y) ** 2) }))
+          .sort((a, b) => a.dist - b.dist);
+
+        // Pick the closest spawn that isn't too close to an already-assigned player
+        for (const { sp } of sortedSpawns) {
+          let tooClose = false;
+          this.players.forEach(other => {
+            if (other.id === player.id) return;
+            if (Math.sqrt((sp.x - other.x) ** 2 + (sp.y - other.y) ** 2) < 40) tooClose = true;
+          });
+          if (!tooClose) {
+            player.x = sp.x;
+            player.y = sp.y;
+            return;
+          }
+        }
+        // Fallback: just use anchor
+        player.x = anchor.x;
+        player.y = anchor.y;
+      });
+    } else {
+      // FFA: spread everyone out maximally
+      const assigned = [];
+      this.players.forEach((player) => {
+        let best = spawns[0];
+        let bestMinDist = 0;
+        for (const sp of spawns) {
+          let minDist = Infinity;
+          for (const u of assigned) {
+            const d = Math.sqrt((sp.x - u.x) ** 2 + (sp.y - u.y) ** 2);
+            if (d < minDist) minDist = d;
+          }
+          if (assigned.length === 0) minDist = Infinity;
+          if (minDist > bestMinDist) { bestMinDist = minDist; best = sp; }
+        }
+        player.x = best.x;
+        player.y = best.y;
+        assigned.push({ x: best.x, y: best.y });
+      });
+    }
+  }
+
   _pickSpawn(forPlayer) {
     const spawns = [...this.map.spawnPoints];
 
@@ -365,6 +428,9 @@ export class GameRoom {
   _startCountdown() {
     this.state = STATES.COUNTDOWN;
     this._spawnLoot();
+
+    // Re-assign spawn positions now that teams are finalized
+    this._assignSpawnPositions();
 
     const spawnPositions = {};
     this.players.forEach((p, id) => {
