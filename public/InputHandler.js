@@ -18,6 +18,8 @@ export class InputHandler {
     window.addEventListener('keydown', (e) => this._onKey(e, true));
     window.addEventListener('keyup', (e) => this._onKey(e, false));
     canvas.addEventListener('mousemove', (e) => this._onMouseMove(e));
+    canvas.addEventListener('mousedown', (e) => { if (e.button === 0) this._onShoot(true); });
+    canvas.addEventListener('mouseup', (e) => { if (e.button === 0) this._onShoot(false); });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -45,6 +47,20 @@ export class InputHandler {
       case 'KeyG': if (down) this._grenadePressed = true; break;
       case 'KeyH': if (down) this._healPressed = true; break;
       case 'KeyR': if (down) this._reloadPressed = true; break;
+    }
+  }
+
+  _onShoot(down) {
+    if (this.sniperMode) {
+      if (down && !this.scopeStartTime) {
+        this.scopeStartTime = performance.now();
+      } else if (!down && this.scopeStartTime) {
+        this._sniperFirePending = true;
+        this._sniperFireAngle = this.angle;
+        this.scopeStartTime = null;
+      }
+    } else {
+      this.shooting = down;
     }
   }
 
