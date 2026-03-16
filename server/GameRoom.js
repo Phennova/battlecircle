@@ -466,6 +466,21 @@ export class GameRoom {
       this.state = STATES.ACTIVE;
       this.gameStartTime = Date.now();
       this.lastTickTime = Date.now();
+
+      // Apply class loadouts for CTF
+      if (this.mode.ctf) {
+        this.players.forEach((player) => {
+          const classId = player.selectedClass || 'assault'; // default to assault
+          const cls = CTF_CLASSES[classId];
+          if (cls) {
+            player.gun = { type: cls.gun, magAmmo: WEAPONS[cls.gun].magSize };
+            player.grenade = { type: cls.grenade.type, count: cls.grenade.count };
+            player.heal = { type: cls.heal.type, count: cls.heal.count };
+            player.ammoReserve = { light: 999, shells: 999, heavy: 999 };
+          }
+        });
+      }
+
       this.io.to(this.id).emit('gameStart', {});
       this._startTickLoop();
     }, 3000);

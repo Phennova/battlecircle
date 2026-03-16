@@ -192,11 +192,37 @@ socket.on('countdown', (data) => {
     predictedX = data.spawnPositions[myId].x;
     predictedY = data.spawnPositions[myId].y;
   }
+
+  // CTF: show class select during countdown
+  if (currentModeConfig && currentModeConfig.ctf) {
+    const overlay = document.getElementById('overlay');
+    overlay.style.display = 'flex';
+    overlay.innerHTML = `
+      <h1 style="font-size:36px;color:#fff;margin-bottom:8px">Choose Your Class</h1>
+      <p style="color:#888;margin-bottom:16px">Game starting soon...</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+        <button onclick="window._selectClass('rusher')" style="padding:12px 18px;background:rgba(232,226,46,0.15);border:1px solid #e8e82e;color:#e8e82e;border-radius:6px;cursor:pointer;font-size:14px">
+          <div style="font-weight:bold">Rusher</div><div style="font-size:11px;color:#aaa">SMG + Frags + Bandages</div>
+        </button>
+        <button onclick="window._selectClass('assault')" style="padding:12px 18px;background:rgba(74,158,255,0.15);border:1px solid #4a9eff;color:#4a9eff;border-radius:6px;cursor:pointer;font-size:14px">
+          <div style="font-weight:bold">Assault</div><div style="font-size:11px;color:#aaa">Rifle + Frags + Bandages</div>
+        </button>
+        <button onclick="window._selectClass('breacher')" style="padding:12px 18px;background:rgba(255,140,66,0.15);border:1px solid #ff8c42;color:#ff8c42;border-radius:6px;cursor:pointer;font-size:14px">
+          <div style="font-weight:bold">Breacher</div><div style="font-size:11px;color:#aaa">Shotgun + Smokes + MedKit</div>
+        </button>
+        <button onclick="window._selectClass('marksman')" style="padding:12px 18px;background:rgba(139,69,19,0.15);border:1px solid #8b4513;color:#cd853f;border-radius:6px;cursor:pointer;font-size:14px">
+          <div style="font-weight:bold">Marksman</div><div style="font-size:11px;color:#aaa">Sniper + Smokes + Bandages</div>
+        </button>
+      </div>
+    `;
+  }
 });
 
 socket.on('gameStart', () => {
   gameActive = true;
   countdownEnd = null;
+  // Dismiss class select overlay
+  document.getElementById('overlay').style.display = 'none';
 });
 
 socket.on('gameState', (state) => {
