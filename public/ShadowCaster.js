@@ -7,6 +7,7 @@ export class ShadowCaster {
   }
 
   setWalls(wallRects) {
+    this._wallRects = wallRects;
     this.segments = [];
     for (const r of wallRects) {
       this.segments.push({ ax: r.x, ay: r.y, bx: r.x + r.w, by: r.y });
@@ -18,23 +19,27 @@ export class ShadowCaster {
     this._doorSegmentCount = 0;
   }
 
-  setDoorWalls(doors) {
-    // Remove previous door segments, add new ones for closed doors
-    if (this._doorSegmentCount > 0) {
-      this.segments.splice(this._baseSegmentCount, this._doorSegmentCount);
+  setDynamicWalls(doors, destroyedWalls) {
+    // Rebuild from base walls, excluding destroyed and adding closed doors
+    this.segments.length = 0;
+    const destroyed = destroyedWalls ? new Set(destroyedWalls) : new Set();
+    for (let i = 0; i < this._wallRects.length; i++) {
+      if (destroyed.has(i)) continue;
+      const r = this._wallRects[i];
+      this.segments.push({ ax: r.x, ay: r.y, bx: r.x + r.w, by: r.y });
+      this.segments.push({ ax: r.x, ay: r.y + r.h, bx: r.x + r.w, by: r.y + r.h });
+      this.segments.push({ ax: r.x, ay: r.y, bx: r.x, by: r.y + r.h });
+      this.segments.push({ ax: r.x + r.w, ay: r.y, bx: r.x + r.w, by: r.y + r.h });
     }
-    this._doorSegmentCount = 0;
-    if (!doors) return;
-    const closedDoors = doors.filter(d => !d.open);
-    for (const d of closedDoors) {
-      // Each door rect becomes 4 line segments
-      this.segments.splice(this._baseSegmentCount + this._doorSegmentCount, 0,
-        { ax: d.x, ay: d.y, bx: d.x + d.w, by: d.y },
-        { ax: d.x, ay: d.y + d.h, bx: d.x + d.w, by: d.y + d.h },
-        { ax: d.x, ay: d.y, bx: d.x, by: d.y + d.h },
-        { ax: d.x + d.w, ay: d.y, bx: d.x + d.w, by: d.y + d.h }
-      );
-      this._doorSegmentCount += 4;
+    // Add closed door walls
+    if (doors) {
+      for (const d of doors) {
+        if (d.open) continue;
+        this.segments.push({ ax: d.x, ay: d.y, bx: d.x + d.w, by: d.y });
+        this.segments.push({ ax: d.x, ay: d.y + d.h, bx: d.x + d.w, by: d.y + d.h });
+        this.segments.push({ ax: d.x, ay: d.y, bx: d.x, by: d.y + d.h });
+        this.segments.push({ ax: d.x + d.w, ay: d.y, bx: d.x + d.w, by: d.y + d.h });
+      }
     }
   }
 

@@ -53,6 +53,8 @@ export class GameRoom {
 
     // Interactive doors — start closed
     this.doors = [];
+    this.wallDamage = new Map(); // "wallIdx" -> hit count
+    this.destroyedWalls = new Set(); // indices of destroyed static walls
     let doorId = 0;
     for (const b of map.buildings) {
       for (const d of (b.doors || [])) {
@@ -264,7 +266,7 @@ export class GameRoom {
   }
 
   _rebuildAllWalls() {
-    this.allWalls = [...this.staticWalls];
+    this.allWalls = this.staticWalls.filter((_, idx) => !this.destroyedWalls.has(idx));
     for (const door of this.doors) {
       if (!door.open) {
         this.allWalls.push(door.wallRect);
@@ -514,14 +516,32 @@ export class GameRoom {
       }
 
       let hitWall = false;
-      for (const wall of this.allWalls) {
+      let hitWallIdx = -1;
+      for (let wi = 0; wi < this.allWalls.length; wi++) {
+        const wall = this.allWalls[wi];
         if (bullet.x >= wall.x && bullet.x <= wall.x + wall.w &&
             bullet.y >= wall.y && bullet.y <= wall.y + wall.h) {
           hitWall = true;
+          hitWallIdx = wi;
           break;
         }
       }
       if (hitWall) {
+        // Track shrapnel hits on walls
+        if (bullet.type === 'shrapnel' && hitWallIdx >= 0) {
+          // Find matching static wall index
+          const hitRect = this.allWalls[hitWallIdx];
+          const staticIdx = this.staticWalls.indexOf(hitRect);
+          if (staticIdx >= 0 && !this.destroyedWalls.has(staticIdx)) {
+            const key = staticIdx;
+            const hits = (this.wallDamage.get(key) || 0) + 1;
+            this.wallDamage.set(key, hits);
+            if (hits >= 3) {
+              this.destroyedWalls.add(staticIdx);
+              this._rebuildAllWalls();
+            }
+          }
+        }
         this.bullets.splice(i, 1);
         continue;
       }
@@ -586,7 +606,7 @@ export class GameRoom {
       // Frag: explode into shrapnel burst
       if (gren.shouldExplode()) {
         // Spawn ~25 shrapnel projectiles with random angles and varied speeds
-        const SHRAPNEL_COUNT = 25;
+        const SHRAPNEL_COUNT = 45;
         const SHRAPNEL_RANGE = 140; // +75% from original 80
         const SHRAPNEL_DAMAGE = 5;
         const shrapnelWeapon = {
@@ -704,6 +724,7 @@ export class GameRoom {
       })),
       smokes: this.smokes.map(s => ({ id: s.id, x: s.x, y: s.y, activatedAt: s.activatedAt, duration: s.duration })),
       doors: this.doors.map(d => ({ id: d.id, x: d.wallRect.x, y: d.wallRect.y, w: d.wallRect.w, h: d.wallRect.h, open: d.open, side: d.side })),
+      destroyedWalls: [...this.destroyedWalls],
       zone: {
         active: this.zone.active,
         centerX: this.zone.centerX,

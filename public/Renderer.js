@@ -16,7 +16,7 @@ export class Renderer {
     }
   }
 
-  draw(cameraX, cameraY, visibilityPolygon, cameraScale) {
+  draw(cameraX, cameraY, visibilityPolygon, cameraScale, destroyedWalls) {
     const { ctx, canvas, map } = this;
     if (!map) return;
 
@@ -50,9 +50,29 @@ export class Renderer {
     ctx.save();
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
+    const destroyed = destroyedWalls ? new Set(destroyedWalls) : new Set();
     ctx.fillStyle = '#555';
-    for (const w of this.allWalls) {
+    for (let wi = 0; wi < this.allWalls.length; wi++) {
+      if (destroyed.has(wi)) continue;
+      const w = this.allWalls[wi];
       ctx.fillRect(w.x, w.y, w.w, w.h);
+    }
+    // Draw rubble at destroyed wall positions
+    if (destroyed.size > 0) {
+      ctx.fillStyle = '#443322';
+      for (const idx of destroyed) {
+        if (idx < this.allWalls.length) {
+          const w = this.allWalls[idx];
+          // Scattered rubble dots
+          for (let r = 0; r < 6; r++) {
+            const rx = w.x + Math.random() * w.w;
+            const ry = w.y + Math.random() * w.h;
+            ctx.beginPath();
+            ctx.arc(rx, ry, 2 + Math.random() * 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
     }
     ctx.restore();
   }

@@ -424,12 +424,15 @@ function loop(timestamp) {
         dx /= len;
         dy /= len;
       }
-      // Build collision walls including closed doors
-      const collisionWalls = renderer.allWalls;
+      // Build collision walls: static walls minus destroyed, plus closed doors
+      const destroyed = gameState.destroyedWalls ? new Set(gameState.destroyedWalls) : new Set();
+      const activeStaticWalls = destroyed.size > 0
+        ? renderer.allWalls.filter((_, i) => !destroyed.has(i))
+        : renderer.allWalls;
       const closedDoorWalls = (gameState.doors || []).filter(d => !d.open);
       const allCollisionWalls = closedDoorWalls.length > 0
-        ? [...collisionWalls, ...closedDoorWalls]
-        : collisionWalls;
+        ? [...activeStaticWalls, ...closedDoorWalls]
+        : activeStaticWalls;
 
       const speedMult = (me.healing || me.reloading) ? 0.3 : 1.0;
       predictedX += dx * PLAYER_SPEED * speedMult * dt;
@@ -498,7 +501,7 @@ function loop(timestamp) {
         }
       }
 
-      shadowCaster.setDoorWalls(gameState.doors);
+      shadowCaster.setDynamicWalls(gameState.doors, gameState.destroyedWalls);
       shadowCaster.addSmokeBlockers(activeSmokes);
       const effectiveVisionRange = isInSmoke ? 40 : currentVisionRange;
       const visibility = shadowCaster.computeVisibility(viewX, viewY, effectiveVisionRange);
@@ -520,7 +523,7 @@ function loop(timestamp) {
       }
 
       // Render
-      renderer.draw(viewX, viewY, visibility, cameraScale);
+      renderer.draw(viewX, viewY, visibility, cameraScale, gameState.destroyedWalls);
 
       // Ground items
       const visibleItems = gameState.groundItems.filter(item =>
@@ -610,12 +613,12 @@ function loop(timestamp) {
           }
         }
 
-        shadowCaster.setDoorWalls(gameState.doors);
+        shadowCaster.setDynamicWalls(gameState.doors, gameState.destroyedWalls);
         shadowCaster.addSmokeBlockers(activeSmokes);
         const visibility = shadowCaster.computeVisibility(viewX, viewY, isInSmoke ? 40 : 600);
         shadowCaster.removeSmokeBlockers();
 
-        renderer.draw(viewX, viewY, visibility);
+        renderer.draw(viewX, viewY, visibility, 1, gameState.destroyedWalls);
 
         const visibleItems = gameState.groundItems.filter(item => shadowCaster.isVisible(item.x, item.y, visibility));
         renderer.drawGroundItems(visibleItems, viewX, viewY, timestamp);
