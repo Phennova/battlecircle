@@ -8,8 +8,8 @@ const MAP_WIDTH = 2400;
 const MAP_HEIGHT = 2400;
 const WALL_THICKNESS = 10;
 const DOORWAY_SIZE = 100;
-const MARGIN = 80; // min distance from map edge for buildings
-const BUILDING_GAP = 60; // min gap between buildings
+const MARGIN = 40; // min distance from map edge for buildings
+const BUILDING_GAP = 120; // min gap between buildings — spread them out
 const PLAYER_RADIUS = 18;
 
 // Building size ranges
@@ -51,9 +51,11 @@ export function generateMap() {
 
   // Generate 6-10 standalone barricades
   const barrierCount = 6 + Math.floor(Math.random() * 5);
+  const placedBarriers = [];
   for (let i = 0; i < barrierCount; i++) {
-    const barrier = tryPlaceBarrier(placedBuildings);
+    const barrier = tryPlaceBarrier(placedBuildings, placedBarriers);
     if (barrier) {
+      placedBarriers.push(barrier);
       map.walls.push(barrier);
     }
   }
@@ -181,7 +183,9 @@ function createBuilding(index, x, y, w, h) {
   return { id, x, y, w, h, walls, doors, lootSlots };
 }
 
-function tryPlaceBarrier(buildings) {
+function tryPlaceBarrier(buildings, placedBarriers) {
+  const MIN_BARRIER_DIST = 200; // min distance between barrier centers
+
   for (let attempt = 0; attempt < 30; attempt++) {
     const isHorizontal = Math.random() < 0.5;
     let barrier;
@@ -210,7 +214,23 @@ function tryPlaceBarrier(buildings) {
         break;
       }
     }
-    if (!clips) return barrier;
+    if (clips) continue;
+
+    // Check not too close to other barriers
+    let tooClose = false;
+    const bcx = barrier.x + barrier.w / 2;
+    const bcy = barrier.y + barrier.h / 2;
+    for (const other of placedBarriers) {
+      const ocx = other.x + other.w / 2;
+      const ocy = other.y + other.h / 2;
+      if (Math.sqrt((bcx - ocx) ** 2 + (bcy - ocy) ** 2) < MIN_BARRIER_DIST) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (tooClose) continue;
+
+    return barrier;
   }
   return null;
 }
