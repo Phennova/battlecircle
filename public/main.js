@@ -1,6 +1,7 @@
 import { Renderer } from './Renderer.js';
 import { InputHandler } from './InputHandler.js';
 import { ShadowCaster } from './ShadowCaster.js';
+import { HUD } from './HUD.js';
 import { PLAYER_RADIUS, PLAYER_SPEED, PLAYER_HP } from '/shared/constants.js';
 import { resolveAgainstWalls } from '/shared/collision.js';
 
@@ -17,6 +18,7 @@ resize();
 const renderer = new Renderer(canvas, ctx);
 const inputHandler = new InputHandler(canvas);
 const shadowCaster = new ShadowCaster();
+const hud = new HUD();
 
 // Connect to server
 const socket = io();
@@ -314,6 +316,9 @@ function loop(timestamp) {
       if (effects.hitFlash && performance.now() - effects.hitFlash.startTime > effects.hitFlash.duration) {
         effects.hitFlash = null;
       }
+
+      // HUD (screen-space, drawn last)
+      hud.draw(ctx, canvas.width, canvas.height, me, gameState);
     }
   }
 
