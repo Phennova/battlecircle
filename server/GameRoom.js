@@ -5,7 +5,7 @@ import { generateName } from './names.js';
 import { resolveAgainstWalls } from '../shared/collision.js';
 import { PLAYER_RADIUS, BULLET_RADIUS, PICKUP_RANGE, TICK_INTERVAL } from '../shared/constants.js';
 import { WEAPONS, AMMO_TYPES } from '../shared/weapons.js';
-import { GAME_MODES } from '../shared/gameModes.js';
+import { GAME_MODES, CTF_CLASSES } from '../shared/gameModes.js';
 
 const STATES = { WAITING: 'WAITING', COUNTDOWN: 'COUNTDOWN', ACTIVE: 'ACTIVE', ENDED: 'ENDED' };
 
@@ -40,6 +40,24 @@ export class GameRoom {
     this.state = STATES.WAITING;
     this.teamScores = this.mode.teams ? [0, 0] : null;
     this.respawnQueue = []; // { playerId, respawnAt }
+
+    // CTF state
+    this.flags = null;
+    if (this.mode.ctf && map.flagZones) {
+      this.flags = map.flagZones.map(fz => ({
+        team: fz.team,
+        teamIndex: fz.team === 'blue' ? 0 : 1,
+        state: 'home', // 'home' | 'carried' | 'held'
+        carrierId: null,
+        holdTime: 0,
+        holdingTeam: null,
+        zoneX: fz.x + fz.w / 2,
+        zoneY: fz.y + fz.h / 2,
+        zone: fz
+      }));
+      this.ctfTimers = [0, 0]; // cumulative hold time per team
+    }
+
     this.players = new Map();
     this.bullets = [];
     this.grenades = [];
@@ -223,6 +241,12 @@ export class GameRoom {
       bullet.originX = p.x;
       bullet.originY = p.y;
       this.bullets.push(bullet);
+    });
+
+    socket.on('selectClass', (classId) => {
+      const p = this.players.get(socket.id);
+      if (!p || !this.mode.ctf) return;
+      p.selectedClass = classId;
     });
 
     socket.on('disconnect', () => {
@@ -427,7 +451,7 @@ export class GameRoom {
 
   _startCountdown() {
     this.state = STATES.COUNTDOWN;
-    this._spawnLoot();
+    if (!this.mode.ctf) this._spawnLoot();
 
     // Re-assign spawn positions now that teams are finalized
     this._assignSpawnPositions();
@@ -815,7 +839,12 @@ export class GameRoom {
       });
     }
 
-    // 8. Process respawns
+    // 8. CTF flag logic
+    if (this.flags) {
+      this._processCTFFlags(dt);
+    }
+
+    // 9. Process respawns
     if (this.mode.respawn) {
       this._processRespawns(now);
     }
@@ -850,6 +879,12 @@ export class GameRoom {
       destroyedWalls: [...this.destroyedWalls],
       teamScores: this.teamScores,
       modeId: this.modeId,
+      flags: this.flags ? this.flags.map(f => ({
+        team: f.team, state: f.state, carrierId: f.carrierId,
+        holdingTeam: f.holdingTeam, zoneX: f.zoneX, zoneY: f.zoneY,
+        zone: f.zone
+      })) : null,
+      ctfTimers: this.ctfTimers || null,
       zone: {
         active: this.zone.active,
         centerX: this.zone.centerX,
@@ -876,6 +911,17 @@ export class GameRoom {
       this.teamScores[attacker.team]++;
     }
 
+    // CTF: if carrier dies, flag returns home
+    if (this.flags) {
+      for (const flag of this.flags) {
+        if (flag.state === 'carried' && flag.carrierId === player.id) {
+          flag.state = 'home';
+          flag.carrierId = null;
+          flag.holdingTeam = null;
+        }
+      }
+    }
+
     this.io.to(this.id).emit('playerKilled', {
       victimId: player.id, killerId,
       victimName: player.name,
@@ -897,6 +943,95 @@ export class GameRoom {
     this._checkWin();
   }
 
+  _processCTFFlags(dt) {
+    const MIDLINE = this.map.width / 2;
+    const FLAG_PICKUP_RANGE = 30;
+
+    for (const flag of this.flags) {
+      if (flag.state === 'held') {
+        // Increment hold timer for the holding team
+        this.ctfTimers[flag.holdingTeam] += dt;
+
+        // Check win
+        if (this.ctfTimers[flag.holdingTeam] >= this.mode.holdTimeToWin) {
+          this.state = STATES.ENDED;
+          clearInterval(this.tickInterval);
+          const winningTeam = TEAM_COLORS[flag.holdingTeam];
+          const standings = [...this.players.values()].map(p => ({
+            name: p.name,
+            team: TEAM_COLORS[p.team] || '?',
+            kills: p.kills,
+            damageDealt: Math.round(p.damageDealt)
+          })).sort((a, b) => b.kills - a.kills);
+          this.io.to(this.id).emit('gameOver', {
+            winnerId: null,
+            winningTeam,
+            teamScores: this.ctfTimers.map(t => Math.round(t)),
+            standings
+          });
+          return;
+        }
+
+        // Check if enemy player can grab the flag from the zone
+        this.players.forEach((player) => {
+          if (!player.alive) return;
+          // Only the team that OWNS this flag can grab it back from enemy zone
+          if (player.team !== flag.teamIndex) return;
+          const dx = player.x - flag.zoneX;
+          const dy = player.y - flag.zoneY;
+          // The flag is in the ENEMY's zone (holdingTeam's zone)
+          const holdingZone = this.flags.find(f => f.teamIndex === flag.holdingTeam);
+          if (!holdingZone) return;
+          const dzx = player.x - holdingZone.zoneX;
+          const dzy = player.y - holdingZone.zoneY;
+          if (Math.sqrt(dzx * dzx + dzy * dzy) < FLAG_PICKUP_RANGE + 100) {
+            // Player is in the zone where their flag is held — pick it up
+            flag.state = 'carried';
+            flag.carrierId = player.id;
+            flag.holdingTeam = null;
+          }
+        });
+      }
+
+      if (flag.state === 'home') {
+        // Check if enemy player picks up the flag
+        this.players.forEach((player) => {
+          if (!player.alive) return;
+          if (player.team === flag.teamIndex) return; // can't pick up own flag
+          const dx = player.x - flag.zoneX;
+          const dy = player.y - flag.zoneY;
+          if (Math.sqrt(dx * dx + dy * dy) < FLAG_PICKUP_RANGE + 100) {
+            flag.state = 'carried';
+            flag.carrierId = player.id;
+          }
+        });
+      }
+
+      if (flag.state === 'carried') {
+        const carrier = this.players.get(flag.carrierId);
+        if (!carrier || !carrier.alive) {
+          // Carrier died or disconnected — flag returns home
+          flag.state = 'home';
+          flag.carrierId = null;
+          flag.holdingTeam = null;
+          continue;
+        }
+
+        // Check if carrier crossed midline into own territory
+        const carrierTeam = carrier.team;
+        const inOwnTerritory = (carrierTeam === 0 && carrier.x < MIDLINE) ||
+                               (carrierTeam === 1 && carrier.x >= MIDLINE);
+        if (inOwnTerritory && flag.teamIndex !== carrierTeam) {
+          // Flag captured — teleport to carrier's team zone
+          const carrierZoneFlag = this.flags.find(f => f.teamIndex === carrierTeam);
+          flag.state = 'held';
+          flag.carrierId = null;
+          flag.holdingTeam = carrierTeam;
+        }
+      }
+    }
+  }
+
   _processRespawns(now) {
     for (let i = this.respawnQueue.length - 1; i >= 0; i--) {
       const entry = this.respawnQueue[i];
@@ -912,9 +1047,17 @@ export class GameRoom {
           player.healingUntil = 0;
           player.reloading = false;
           player.reloadingUntil = 0;
-          // Give a starter pistol on respawn
-          player.gun = { type: 'pistol', magAmmo: WEAPONS.pistol.magSize };
-          player.ammoReserve = { light: 24, shells: 0, heavy: 0 };
+          // Apply loadout
+          if (this.mode.ctf && player.selectedClass && CTF_CLASSES[player.selectedClass]) {
+            const cls = CTF_CLASSES[player.selectedClass];
+            player.gun = { type: cls.gun, magAmmo: WEAPONS[cls.gun].magSize };
+            player.grenade = { type: cls.grenade.type, count: cls.grenade.count };
+            player.heal = { type: cls.heal.type, count: cls.heal.count };
+            player.ammoReserve = { light: 999, shells: 999, heavy: 999 };
+          } else {
+            player.gun = { type: 'pistol', magAmmo: WEAPONS.pistol.magSize };
+            player.ammoReserve = { light: 24, shells: 0, heavy: 0 };
+          }
         }
         this.respawnQueue.splice(i, 1);
       }

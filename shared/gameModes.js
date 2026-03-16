@@ -48,5 +48,27 @@ export const GAME_MODES = {
     scoreToWin: 20,
     hasZone: false,
     respawnTime: 3000
+  },
+  ctf_3v3: {
+    name: 'Capture the Flag 3v3',
+    description: 'Capture and hold the enemy flag',
+    minPlayers: 6,
+    maxPlayers: 6,
+    teams: true,
+    teamSize: 3,
+    teamCount: 2,
+    respawn: true,
+    scoreToWin: null,
+    hasZone: false,
+    respawnTime: 3000,
+    ctf: true,
+    holdTimeToWin: 180
   }
+};
+
+export const CTF_CLASSES = {
+  rusher: { name: 'Rusher', gun: 'smg', grenade: { type: 'frag', count: 2 }, heal: { type: 'bandage', count: 3 } },
+  assault: { name: 'Assault', gun: 'rifle', grenade: { type: 'frag', count: 2 }, heal: { type: 'bandage', count: 3 } },
+  breacher: { name: 'Breacher', gun: 'shotgun', grenade: { type: 'smoke', count: 2 }, heal: { type: 'medkit', count: 1 } },
+  marksman: { name: 'Marksman', gun: 'sniper', grenade: { type: 'smoke', count: 2 }, heal: { type: 'bandage', count: 3 } }
 };

@@ -756,6 +756,130 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
+  drawCTFTerritories(cameraX, cameraY, mapWidth, mapHeight) {
+    const { ctx, canvas } = this;
+    const _s = this._currentScale || 1;
+    const offsetX = canvas.width / 2 - cameraX * _s;
+    const offsetY = canvas.height / 2 - cameraY * _s;
+
+    ctx.save();
+    // Blue side (left half)
+    ctx.fillStyle = 'rgba(40,60,120,0.12)';
+    ctx.fillRect(offsetX, offsetY, (mapWidth / 2) * _s, mapHeight * _s);
+    // Red side (right half)
+    ctx.fillStyle = 'rgba(120,40,40,0.12)';
+    ctx.fillRect(offsetX + (mapWidth / 2) * _s, offsetY, (mapWidth / 2) * _s, mapHeight * _s);
+    // Midline
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.setLineDash([10 * _s, 10 * _s]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(offsetX + (mapWidth / 2) * _s, offsetY);
+    ctx.lineTo(offsetX + (mapWidth / 2) * _s, offsetY + mapHeight * _s);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  drawFlagZones(flags, cameraX, cameraY, timestamp) {
+    if (!flags) return;
+    const { ctx, canvas } = this;
+    ctx.save();
+    const _s = this._currentScale || 1;
+    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.scale(_s, _s);
+
+    for (const flag of flags) {
+      const zone = flag.zone;
+      if (!zone) continue;
+      const color = flag.team === 'blue' ? '#4a9eff' : '#ff6b6b';
+
+      // Zone border
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 6]);
+      ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
+      ctx.setLineDash([]);
+
+      // Zone fill
+      ctx.fillStyle = flag.team === 'blue' ? 'rgba(74,158,255,0.06)' : 'rgba(255,107,107,0.06)';
+      ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+
+      // Flag icon (if home or held in this zone)
+      if (flag.state === 'home' || (flag.state === 'held' && flag.holdingTeam !== null)) {
+        const fx = flag.state === 'home' ? flag.zoneX : flag.zoneX;
+        const fy = flag.state === 'home' ? flag.zoneY : flag.zoneY;
+        // Draw at the correct zone
+        const drawX = flag.state === 'held'
+          ? flags.find(f => f.team !== flag.team)?.zoneX || flag.zoneX
+          : flag.zoneX;
+        const drawY = flag.state === 'held'
+          ? flags.find(f => f.team !== flag.team)?.zoneY || flag.zoneY
+          : flag.zoneY;
+
+        // Flag pennant
+        ctx.fillStyle = color;
+        ctx.fillRect(drawX - 1, drawY - 20, 3, 25); // pole
+        ctx.beginPath();
+        ctx.moveTo(drawX + 2, drawY - 20);
+        ctx.lineTo(drawX + 18, drawY - 14);
+        ctx.lineTo(drawX + 2, drawY - 8);
+        ctx.closePath();
+        ctx.fill();
+
+        // Pulsing glow if held
+        if (flag.state === 'held') {
+          const pulse = 0.3 + 0.2 * Math.sin(timestamp / 300);
+          ctx.fillStyle = `rgba(255, 215, 0, ${pulse})`;
+          ctx.beginPath();
+          ctx.arc(drawX, drawY - 10, 25, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    ctx.restore();
+  }
+
+  drawCarrierGlow(x, y, radius, timestamp) {
+    const { ctx } = this;
+    const alpha = 0.4 + 0.4 * Math.sin(timestamp / 200);
+    ctx.strokeStyle = `rgba(255, 215, 0, ${alpha})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(x, y, radius + 6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  drawCarrierArrow(ctx, canvasW, canvasH, carrierX, carrierY, viewX, viewY, teamColor) {
+    const dx = carrierX - viewX;
+    const dy = carrierY - viewY;
+    const angle = Math.atan2(dy, dx);
+
+    // Check if carrier is off-screen
+    const _s = this._currentScale || 1;
+    const screenX = canvasW / 2 + dx * _s;
+    const screenY = canvasH / 2 + dy * _s;
+    if (screenX > 20 && screenX < canvasW - 20 && screenY > 20 && screenY < canvasH - 20) return;
+
+    // Arrow at screen edge
+    const margin = 40;
+    const arrowX = Math.max(margin, Math.min(canvasW - margin, screenX));
+    const arrowY = Math.max(margin, Math.min(canvasH - margin, screenY));
+
+    ctx.save();
+    ctx.translate(arrowX, arrowY);
+    ctx.rotate(angle);
+    ctx.fillStyle = teamColor;
+    ctx.beginPath();
+    ctx.moveTo(12, 0);
+    ctx.lineTo(-6, -7);
+    ctx.lineTo(-6, 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   drawScopeOverlay(ctx, canvasW, canvasH) {
     ctx.strokeStyle = 'rgba(255, 200, 100, 0.3)';
     ctx.lineWidth = 1;

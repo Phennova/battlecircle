@@ -21,7 +21,123 @@ const BUILDING_TEMPLATES = [
 
 const SIDES = ['top', 'bottom', 'left', 'right'];
 
-export function generateMap() {
+export function generateMap(modeId = 'battle_royale') {
+  if (modeId === 'ctf_3v3') return generateCTFMap();
+  return generateStandardMap();
+}
+
+function generateCTFMap() {
+  const map = {
+    width: MAP_WIDTH,
+    height: MAP_HEIGHT,
+    tileSize: 40,
+    spawnPoints: [],
+    walls: [],
+    buildings: [],
+    ctf: true,
+    flagZones: [
+      { team: 'blue', x: 500, y: 1100, w: 200, h: 200 },
+      { team: 'red', x: 1700, y: 1100, w: 200, h: 200 }
+    ]
+  };
+
+  // Boundary walls
+  map.walls.push({ x: 0, y: 0, w: MAP_WIDTH, h: WALL_THICKNESS });
+  map.walls.push({ x: 0, y: MAP_HEIGHT - WALL_THICKNESS, w: MAP_WIDTH, h: WALL_THICKNESS });
+  map.walls.push({ x: 0, y: 0, w: WALL_THICKNESS, h: MAP_HEIGHT });
+  map.walls.push({ x: MAP_WIDTH - WALL_THICKNESS, y: 0, w: WALL_THICKNESS, h: MAP_HEIGHT });
+
+  // Generate 12-16 barriers (6-8 per side, mirrored roughly)
+  const barrierCount = 12 + Math.floor(Math.random() * 5);
+  const placedBarriers = [];
+  const halfBarriers = Math.ceil(barrierCount / 2);
+
+  for (let i = 0; i < halfBarriers; i++) {
+    // Place on blue side (x: 100-1100)
+    const barrier = tryPlaceCTFBarrier(100, 1100, placedBarriers, map.flagZones);
+    if (barrier) {
+      placedBarriers.push(barrier);
+      map.walls.push(barrier);
+      // Mirror to red side
+      const mirrored = {
+        x: MAP_WIDTH - barrier.x - barrier.w,
+        y: barrier.y,
+        w: barrier.w,
+        h: barrier.h
+      };
+      placedBarriers.push(mirrored);
+      map.walls.push(mirrored);
+    }
+  }
+
+  // Spawn points: blue on left, red on right
+  for (let i = 0; i < 8; i++) {
+    map.spawnPoints.push({
+      x: 80 + Math.random() * 300,
+      y: 200 + (MAP_HEIGHT - 400) * (i / 7)
+    });
+  }
+  for (let i = 0; i < 8; i++) {
+    map.spawnPoints.push({
+      x: MAP_WIDTH - 80 - Math.random() * 300,
+      y: 200 + (MAP_HEIGHT - 400) * (i / 7)
+    });
+  }
+
+  return map;
+}
+
+function tryPlaceCTFBarrier(minX, maxX, placed, flagZones) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const isHorizontal = Math.random() < 0.5;
+    let barrier;
+    if (isHorizontal) {
+      barrier = {
+        x: snapToGrid(randInt(minX, maxX - 200)),
+        y: snapToGrid(randInt(100, MAP_HEIGHT - 200)),
+        w: randInt(100, 200),
+        h: WALL_THICKNESS
+      };
+    } else {
+      barrier = {
+        x: snapToGrid(randInt(minX, maxX - 100)),
+        y: snapToGrid(randInt(100, MAP_HEIGHT - 300)),
+        w: WALL_THICKNESS,
+        h: randInt(100, 200)
+      };
+    }
+
+    // Check not overlapping flag zones
+    let clips = false;
+    for (const fz of flagZones) {
+      if (rectsOverlap(barrier.x, barrier.y, barrier.w, barrier.h,
+                       fz.x, fz.y, fz.w, fz.h, 40)) {
+        clips = true;
+        break;
+      }
+    }
+    if (clips) continue;
+
+    // Check not too close to other barriers
+    let tooClose = false;
+    const bcx = barrier.x + barrier.w / 2;
+    const bcy = barrier.y + barrier.h / 2;
+    for (const other of placed) {
+      const ocx = other.x + other.w / 2;
+      const ocy = other.y + other.h / 2;
+      if (Math.sqrt((bcx - ocx) ** 2 + (bcy - ocy) ** 2) < 150) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (tooClose) continue;
+
+    return barrier;
+  }
+  return null;
+}
+
+function generateStandardMap() {
   const map = {
     width: MAP_WIDTH,
     height: MAP_HEIGHT,

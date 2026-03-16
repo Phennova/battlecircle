@@ -24,7 +24,7 @@ export class HUD {
     }
   }
 
-  drawMinimap(ctx, canvasW, canvasH, map, playerX, playerY, zone, destroyedWalls, teammates) {
+  drawMinimap(ctx, canvasW, canvasH, map, playerX, playerY, zone, destroyedWalls, teammates, flags) {
     if (!map) return;
 
     const SIZE = 140;
@@ -96,6 +96,31 @@ export class HUD {
       ctx.arc(mx + zone.centerX * scale, my + zone.centerY * scale, zone.currentRadius * scale, 0, Math.PI * 2, true);
       ctx.fill('evenodd');
       ctx.restore();
+    }
+
+    // CTF flag zones and carrier on minimap
+    if (flags) {
+      for (const flag of flags) {
+        const fzColor = flag.team === 'blue' ? 'rgba(74,158,255,0.25)' : 'rgba(255,107,107,0.25)';
+        if (flag.zone) {
+          ctx.fillStyle = fzColor;
+          ctx.fillRect(mx + flag.zone.x * scale, my + flag.zone.y * scale,
+                       flag.zone.w * scale, flag.zone.h * scale);
+        }
+        // Carrier dot (gold, visible to all)
+        if (flag.state === 'carried' && flag.carrierId) {
+          const allPlayers = teammates; // we don't have all players here, use carrier position from flag
+          // Draw at flag zone if we don't have carrier coords (they're in gameState.players)
+        }
+      }
+      // CTF midline
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(mx + (map.width / 2) * scale, my);
+      ctx.lineTo(mx + (map.width / 2) * scale, my + SIZE);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
 
     // Teammate dots
@@ -546,6 +571,57 @@ export class HUD {
     ctx.font = '10px sans-serif';
     ctx.fillStyle = '#444';
     ctx.fillText('E Pickup   G Grenade   H Heal   R Reload   Space Shoot', x, y);
+  }
+
+  drawCTFStatus(ctx, canvasW, flags, ctfTimers, holdTimeToWin, players) {
+    if (!flags || !ctfTimers) return;
+
+    const cx = canvasW / 2;
+    const y = 20;
+    const barW = 140;
+    const barH = 8;
+
+    ctx.font = '11px sans-serif';
+    ctx.textBaseline = 'top';
+
+    for (let i = 0; i < flags.length; i++) {
+      const flag = flags[i];
+      const isBlue = flag.team === 'blue';
+      const color = isBlue ? '#4a9eff' : '#ff6b6b';
+      const xOff = isBlue ? cx - barW - 30 : cx + 30;
+
+      // Flag state text
+      ctx.fillStyle = color;
+      ctx.textAlign = isBlue ? 'right' : 'left';
+      let stateText = 'HOME';
+      if (flag.state === 'carried') {
+        const carrier = players.find(p => p.id === flag.carrierId);
+        stateText = `CARRIED by ${carrier ? carrier.name : '?'}`;
+      } else if (flag.state === 'held') {
+        stateText = 'HELD';
+      }
+      const labelX = isBlue ? xOff + barW : xOff;
+      ctx.fillText(`${flag.team.toUpperCase()} Flag: ${stateText}`, labelX, y);
+
+      // Hold timer bar
+      const teamIdx = isBlue ? 0 : 1;
+      const holdPct = Math.min(1, ctfTimers[teamIdx] / holdTimeToWin);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(xOff, y + 16, barW, barH);
+      ctx.fillStyle = color;
+      ctx.fillRect(xOff, y + 16, barW * holdPct, barH);
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(xOff, y + 16, barW, barH);
+
+      // Timer text
+      const sec = Math.floor(ctfTimers[teamIdx]);
+      const min = Math.floor(sec / 60);
+      const s = sec % 60;
+      ctx.fillStyle = '#aaa';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(`${min}:${s.toString().padStart(2, '0')}`, labelX, y + 28);
+    }
   }
 
   _drawTeamScores(ctx, canvasW, scores) {

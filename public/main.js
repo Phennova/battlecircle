@@ -181,6 +181,10 @@ window._joinTeam = (teamIndex) => {
   readyBtn.style.background = '#555';
 };
 
+window._selectClass = (classId) => {
+  socket.emit('selectClass', classId);
+};
+
 socket.on('countdown', (data) => {
   countdownEnd = Date.now() + data.seconds * 1000;
   lobby.style.display = 'none';
@@ -231,16 +235,41 @@ socket.on('playerKilled', (data) => {
   killFeed.push({ ...data, time: performance.now() });
 
   if (data.victimId === myId) {
-    const isTDM = currentModeConfig && currentModeConfig.respawn;
+    const isCTF = currentModeConfig && currentModeConfig.ctf;
+    const isRespawn = currentModeConfig && currentModeConfig.respawn;
 
-    if (isTDM) {
+    if (isCTF) {
+      // CTF: death with class select
+      dead = true;
+      deathTime = performance.now();
+      const overlay = document.getElementById('overlay');
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `
+        <h1 style="font-size:36px;color:#ff4444">KILLED</h1>
+        <p style="color:#888;margin:8px 0 16px">Choose a class:</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+          <button onclick="window._selectClass('rusher')" style="padding:10px 16px;background:rgba(232,226,46,0.15);border:1px solid #e8e82e;color:#e8e82e;border-radius:6px;cursor:pointer;font-size:13px">
+            <div style="font-weight:bold">Rusher</div><div style="font-size:11px;color:#aaa">SMG + Frags + Bandages</div>
+          </button>
+          <button onclick="window._selectClass('assault')" style="padding:10px 16px;background:rgba(74,158,255,0.15);border:1px solid #4a9eff;color:#4a9eff;border-radius:6px;cursor:pointer;font-size:13px">
+            <div style="font-weight:bold">Assault</div><div style="font-size:11px;color:#aaa">Rifle + Frags + Bandages</div>
+          </button>
+          <button onclick="window._selectClass('breacher')" style="padding:10px 16px;background:rgba(255,140,66,0.15);border:1px solid #ff8c42;color:#ff8c42;border-radius:6px;cursor:pointer;font-size:13px">
+            <div style="font-weight:bold">Breacher</div><div style="font-size:11px;color:#aaa">Shotgun + Smokes + MedKit</div>
+          </button>
+          <button onclick="window._selectClass('marksman')" style="padding:10px 16px;background:rgba(139,69,19,0.15);border:1px solid #8b4513;color:#cd853f;border-radius:6px;cursor:pointer;font-size:13px">
+            <div style="font-weight:bold">Marksman</div><div style="font-size:11px;color:#aaa">Sniper + Smokes + Bandages</div>
+          </button>
+        </div>
+        <p style="color:#555;margin-top:12px;font-size:11px">Respawning in 3s...</p>
+      `;
+    } else if (isRespawn) {
       // TDM: brief death flash, then wait for respawn
       dead = true;
       deathTime = performance.now();
       const overlay = document.getElementById('overlay');
       overlay.style.display = 'flex';
       overlay.innerHTML = `<h1 style="font-size:36px;color:#ff4444">KILLED</h1><p style="color:#888;margin-top:8px">Respawning...</p>`;
-      // Auto-dismiss when respawned (check in game loop)
     } else {
       // BR: death -> spectator
       dead = true;
@@ -653,6 +682,12 @@ function loop(timestamp) {
       // Render
       renderer.draw(viewX, viewY, visibility, cameraScale, gameState.destroyedWalls);
 
+      // CTF territory tint and flag zones
+      if (gameState.flags) {
+        renderer.drawCTFTerritories(viewX, viewY, map.width, map.height);
+        renderer.drawFlagZones(gameState.flags, viewX, viewY, timestamp);
+      }
+
       // Ground items
       const visibleItems = gameState.groundItems.filter(item =>
         shadowCaster.isVisible(item.x, item.y, visibility)
@@ -687,11 +722,27 @@ function loop(timestamp) {
         if (shadowCaster.isVisible(interp.x, interp.y, visibility)) {
           const otherGunType = interp.gun ? interp.gun.type : null;
           renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, getPlayerColor(p || interp, i), interp.health, PLAYER_HP, otherGunType, interp.name);
+          // CTF carrier glow
+          if (gameState.flags) {
+            for (const flag of gameState.flags) {
+              if (flag.state === 'carried' && flag.carrierId === p.id) {
+                renderer.drawCarrierGlow(interp.x, interp.y, PLAYER_RADIUS, timestamp);
+              }
+            }
+          }
         }
       });
 
       const myGunType = me.gun ? me.gun.type : null;
       renderer.drawPlayer(viewX, viewY, inp.angle, PLAYER_RADIUS, getPlayerColor(me, playerIndex), me.health, PLAYER_HP, myGunType, me.name);
+      // CTF carrier glow for local player
+      if (gameState.flags) {
+        for (const flag of gameState.flags) {
+          if (flag.state === 'carried' && flag.carrierId === myId) {
+            renderer.drawCarrierGlow(viewX, viewY, PLAYER_RADIUS, timestamp);
+          }
+        }
+      }
 
       ctx.restore();
 
@@ -716,10 +767,27 @@ function loop(timestamp) {
       const teammates = (me.team !== undefined && me.team !== null)
         ? gameState.players.filter(p => p.id !== myId && p.alive && p.team === me.team)
         : [];
-      hud.drawMinimap(ctx, canvas.width, canvas.height, map, viewX, viewY, gameState.zone, gameState.destroyedWalls, teammates);
+      hud.drawMinimap(ctx, canvas.width, canvas.height, map, viewX, viewY, gameState.zone, gameState.destroyedWalls, teammates, gameState.flags);
       hud.drawKillFeed(ctx, canvas.width, killFeed, performance.now());
       hud.drawWarning(ctx, canvas.width, canvas.height, warning, performance.now());
       hud.drawItemTooltip(ctx, canvas.width, canvas.height, gameState.groundItems, viewX, viewY, cameraScale, gameState.doors);
+
+      // CTF HUD
+      if (gameState.flags && gameState.ctfTimers && currentModeConfig) {
+        hud.drawCTFStatus(ctx, canvas.width, gameState.flags, gameState.ctfTimers,
+          currentModeConfig.holdTimeToWin || 180, gameState.players);
+        // Carrier arrows
+        for (const flag of gameState.flags) {
+          if (flag.state === 'carried' && flag.carrierId) {
+            const carrier = gameState.players.find(p => p.id === flag.carrierId);
+            if (carrier) {
+              const teamColor = flag.team === 'blue' ? '#4a9eff' : '#ff6b6b';
+              renderer.drawCarrierArrow(ctx, canvas.width, canvas.height,
+                carrier.x, carrier.y, viewX, viewY, teamColor);
+            }
+          }
+        }
+      }
 
     } else if (spectating && spectateTargetId && gameState) {
       // Spectator rendering
@@ -782,7 +850,7 @@ function loop(timestamp) {
 
         hud.drawSpectatorHUD(ctx, canvas.width, canvas.height,
           spectTarget.name || '?', gameState.alivePlayers, gameState.players.length);
-        hud.drawMinimap(ctx, canvas.width, canvas.height, map, viewX, viewY, gameState.zone, gameState.destroyedWalls, []);
+        hud.drawMinimap(ctx, canvas.width, canvas.height, map, viewX, viewY, gameState.zone, gameState.destroyedWalls, [], gameState.flags);
         hud.drawKillFeed(ctx, canvas.width, killFeed, performance.now());
 
         // Spectator controls

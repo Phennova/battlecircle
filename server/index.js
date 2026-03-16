@@ -37,7 +37,7 @@ function getOrCreateRoom(modeId) {
   }
 
   const id = `${modeId}_${Date.now()}`;
-  const mapData = generateMap();
+  const mapData = generateMap(modeId);
   console.log(`[${modeId}] New room ${id}: ${mapData.buildings.length} buildings`);
   const room = new GameRoom(id, mapData, io, modeId);
   rooms.set(id, room);
