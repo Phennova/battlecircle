@@ -16,15 +16,18 @@ export class Renderer {
     }
   }
 
-  draw(cameraX, cameraY, visibilityPolygon) {
+  draw(cameraX, cameraY, visibilityPolygon, cameraScale) {
     const { ctx, canvas, map } = this;
     if (!map) return;
 
-    const offsetX = canvas.width / 2 - cameraX;
-    const offsetY = canvas.height / 2 - cameraY;
+    const scale = cameraScale || 1;
+    this._currentScale = scale;
+    const offsetX = canvas.width / 2 - cameraX * scale;
+    const offsetY = canvas.height / 2 - cameraY * scale;
 
     ctx.save();
     ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
 
     // Floor
     ctx.fillStyle = '#1a1a2e';
@@ -40,12 +43,13 @@ export class Renderer {
 
     // Shadow overlay (screen-space)
     if (visibilityPolygon) {
-      this.drawShadow(visibilityPolygon, cameraX, cameraY);
+      this.drawShadow(visibilityPolygon, cameraX, cameraY, scale);
     }
 
     // Walls drawn ABOVE shadow so always visible
     ctx.save();
     ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
     ctx.fillStyle = '#555';
     for (const w of this.allWalls) {
       ctx.fillRect(w.x, w.y, w.w, w.h);
@@ -53,15 +57,16 @@ export class Renderer {
     ctx.restore();
   }
 
-  drawShadow(visibilityPolygon, cameraX, cameraY) {
+  drawShadow(visibilityPolygon, cameraX, cameraY, scale) {
     const { ctx, canvas, shadowCanvas, shadowCtx, map } = this;
     if (!map || visibilityPolygon.length < 3) return;
 
     shadowCanvas.width = canvas.width;
     shadowCanvas.height = canvas.height;
 
-    const offsetX = canvas.width / 2 - cameraX;
-    const offsetY = canvas.height / 2 - cameraY;
+    const s = scale || 1;
+    const offsetX = canvas.width / 2 - cameraX * s;
+    const offsetY = canvas.height / 2 - cameraY * s;
 
     // Fill with dark
     shadowCtx.fillStyle = 'rgba(0, 0, 0, 0.88)';
@@ -72,13 +77,13 @@ export class Renderer {
     shadowCtx.fillStyle = '#fff';
     shadowCtx.beginPath();
     shadowCtx.moveTo(
-      visibilityPolygon[0].x + offsetX,
-      visibilityPolygon[0].y + offsetY
+      visibilityPolygon[0].x * s + offsetX,
+      visibilityPolygon[0].y * s + offsetY
     );
     for (let i = 1; i < visibilityPolygon.length; i++) {
       shadowCtx.lineTo(
-        visibilityPolygon[i].x + offsetX,
-        visibilityPolygon[i].y + offsetY
+        visibilityPolygon[i].x * s + offsetX,
+        visibilityPolygon[i].y * s + offsetY
       );
     }
     shadowCtx.closePath();
@@ -198,7 +203,9 @@ export class Renderer {
   drawBullets(bullets, cameraX, cameraY) {
     const { ctx, canvas } = this;
     ctx.save();
-    ctx.translate(canvas.width / 2 - cameraX, canvas.height / 2 - cameraY);
+    const _s = this._currentScale || 1;
+    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.scale(_s, _s);
     for (const b of bullets) {
       ctx.fillStyle = '#fff';
       ctx.beginPath();
@@ -211,7 +218,9 @@ export class Renderer {
   drawGroundItems(items, cameraX, cameraY, timestamp) {
     const { ctx, canvas } = this;
     ctx.save();
-    ctx.translate(canvas.width / 2 - cameraX, canvas.height / 2 - cameraY);
+    const _s = this._currentScale || 1;
+    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.scale(_s, _s);
 
     const EQUIP_COLORS = {
       pistol: '#aaa',
@@ -413,7 +422,9 @@ export class Renderer {
   drawGrenades(grenades, cameraX, cameraY, timestamp) {
     const { ctx, canvas } = this;
     ctx.save();
-    ctx.translate(canvas.width / 2 - cameraX, canvas.height / 2 - cameraY);
+    const _s = this._currentScale || 1;
+    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.scale(_s, _s);
     for (const g of grenades) {
       ctx.fillStyle = '#ff8c42';
       ctx.beginPath();
@@ -434,21 +445,22 @@ export class Renderer {
   drawZone(zone, cameraX, cameraY, timestamp) {
     if (!zone || !zone.active) return;
     const { ctx, canvas, map } = this;
-    const offsetX = canvas.width / 2 - cameraX;
-    const offsetY = canvas.height / 2 - cameraY;
+    const _s = this._currentScale || 1;
+    const offsetX = canvas.width / 2 - cameraX * _s;
+    const offsetY = canvas.height / 2 - cameraY * _s;
 
     ctx.save();
     ctx.fillStyle = 'rgba(200, 0, 0, 0.25)';
     ctx.beginPath();
-    ctx.rect(offsetX, offsetY, map.width, map.height);
-    ctx.arc(zone.centerX + offsetX, zone.centerY + offsetY, zone.currentRadius, 0, Math.PI * 2, true);
+    ctx.rect(offsetX, offsetY, map.width * _s, map.height * _s);
+    ctx.arc(zone.centerX * _s + offsetX, zone.centerY * _s + offsetY, zone.currentRadius * _s, 0, Math.PI * 2, true);
     ctx.fill('evenodd');
 
     const pulse = 0.6 + 0.4 * Math.sin(timestamp / 300);
     ctx.strokeStyle = `rgba(255, 50, 50, ${pulse})`;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(zone.centerX + offsetX, zone.centerY + offsetY, zone.currentRadius, 0, Math.PI * 2);
+    ctx.arc(zone.centerX * _s + offsetX, zone.centerY * _s + offsetY, zone.currentRadius * _s, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
@@ -456,7 +468,9 @@ export class Renderer {
   drawExplosions(explosions, cameraX, cameraY, now) {
     const { ctx, canvas } = this;
     ctx.save();
-    ctx.translate(canvas.width / 2 - cameraX, canvas.height / 2 - cameraY);
+    const _s = this._currentScale || 1;
+    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.scale(_s, _s);
     for (const exp of explosions) {
       const elapsed = now - exp.startTime;
       if (elapsed > exp.duration) continue;
@@ -484,14 +498,16 @@ export class Renderer {
   drawSmokeClouds(smokes, cameraX, cameraY, timestamp) {
     const { ctx, canvas } = this;
     ctx.save();
-    ctx.translate(canvas.width / 2 - cameraX, canvas.height / 2 - cameraY);
+    const _s = this._currentScale || 1;
+    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.scale(_s, _s);
 
     for (const smoke of smokes) {
       const elapsed = Date.now() - smoke.activatedAt;
       if (elapsed > smoke.duration) continue;
 
       let opacity = 0.6;
-      const fadeStart = smoke.duration - 1000;
+      const fadeStart = smoke.duration - 2000;
       if (elapsed > fadeStart) {
         opacity = 0.6 * (1 - (elapsed - fadeStart) / 1000);
       }
@@ -522,7 +538,9 @@ export class Renderer {
   drawTracers(bullets, tracerTrails, cameraX, cameraY, now) {
     const { ctx, canvas } = this;
     ctx.save();
-    ctx.translate(canvas.width / 2 - cameraX, canvas.height / 2 - cameraY);
+    const _s = this._currentScale || 1;
+    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.scale(_s, _s);
 
     for (const b of bullets) {
       if (b.type === 'sniper' && b.originX != null) {

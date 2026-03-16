@@ -514,7 +514,7 @@ export class GameRoom {
           x: gren.x,
           y: gren.y,
           activatedAt: Date.now(),
-          duration: 7000
+          duration: 20000
         });
         this.grenades.splice(i, 1);
         continue;

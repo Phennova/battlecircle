@@ -375,8 +375,11 @@ function loop(timestamp) {
       const visibility = shadowCaster.computeVisibility(viewX, viewY, effectiveVisionRange);
       shadowCaster.removeSmokeBlockers();
 
+      // Camera scale — zoom out when scoping to show full vision range
+      const cameraScale = isScoping ? 600 / currentVisionRange : 1;
+
       // Render
-      renderer.draw(viewX, viewY, visibility);
+      renderer.draw(viewX, viewY, visibility, cameraScale);
 
       // Ground items
       const visibleItems = gameState.groundItems.filter(item =>
@@ -401,7 +404,8 @@ function loop(timestamp) {
 
       // Players
       ctx.save();
-      ctx.translate(canvas.width / 2 - viewX, canvas.height / 2 - viewY);
+      ctx.translate(canvas.width / 2 - viewX * cameraScale, canvas.height / 2 - viewY * cameraScale);
+      ctx.scale(cameraScale, cameraScale);
 
       const playerIndex = gameState.players.findIndex(p => p.id === myId);
       gameState.players.forEach((p, i) => {
@@ -427,10 +431,7 @@ function loop(timestamp) {
         effects.hitFlash = null;
       }
 
-      // Scope overlay
-      if (isScoping) {
-        renderer.drawScopeOverlay(ctx, canvas.width, canvas.height);
-      }
+      // Scope: no overlay, camera zoom handled by vision range
 
       // HUD
       hud.draw(ctx, canvas.width, canvas.height, me, gameState);
