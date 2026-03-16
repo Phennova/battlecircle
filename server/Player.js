@@ -2,8 +2,9 @@ import { PLAYER_RADIUS, PLAYER_SPEED, PLAYER_HP } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 
 export class Player {
-  constructor(id, spawnX, spawnY) {
+  constructor(id, spawnX, spawnY, name) {
     this.id = id;
+    this.name = name;
     this.x = spawnX;
     this.y = spawnY;
     this.radius = PLAYER_RADIUS;
@@ -16,7 +17,7 @@ export class Player {
     this.gun = null;
     this.grenade = null;
     this.heal = null;
-    this.ammoReserve = { pistol: 0, shotgun: 0, rifle: 0 };
+    this.ammoReserve = { pistol: 0, shotgun: 0, rifle: 0, smg: 0, sniper: 0 };
 
     // Input state
     this.input = {
@@ -37,12 +38,15 @@ export class Player {
 
     // Stats
     this.kills = 0;
+    this.damageDealt = 0;
+    this.placement = 0;
     this.joinedAt = Date.now();
   }
 
   toSnapshot() {
     return {
       id: this.id,
+      name: this.name,
       x: this.x,
       y: this.y,
       angle: this.angle,

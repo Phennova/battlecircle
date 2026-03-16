@@ -1,23 +1,33 @@
 let nextGrenadeId = 0;
 
 export class Grenade {
-  constructor(ownerId, x, y, angle) {
+  constructor(ownerId, x, y, angle, type = 'frag') {
     this.id = `g${nextGrenadeId++}`;
     this.ownerId = ownerId;
     this.x = x;
     this.y = y;
     this.angle = angle;
+    this.type = type;
     this.speed = 300;
     this.maxDistance = 350;
     this.distanceTraveled = 0;
     this.stopped = false;
-    this.fuseTime = 2500;
-    this.createdAt = Date.now();
-    this.explodeAt = Date.now() + this.fuseTime;
-    this.explosionRadius = 80;
-    this.centerDamage = 60;
-    this.edgeDamage = 20;
     this.alive = true;
+
+    if (type === 'smoke') {
+      this.fuseTime = 0;
+      this.explodeAt = Infinity;
+      this.explosionRadius = 0;
+      this.centerDamage = 0;
+      this.edgeDamage = 0;
+    } else {
+      this.fuseTime = 2500;
+      this.createdAt = Date.now();
+      this.explodeAt = Date.now() + this.fuseTime;
+      this.explosionRadius = 80;
+      this.centerDamage = 60;
+      this.edgeDamage = 20;
+    }
   }
 
   update(dt, walls) {
@@ -44,7 +54,11 @@ export class Grenade {
   }
 
   shouldExplode() {
-    return Date.now() >= this.explodeAt;
+    return this.type === 'frag' && Date.now() >= this.explodeAt;
+  }
+
+  shouldActivateSmoke() {
+    return this.type === 'smoke' && this.stopped;
   }
 
   getDamageAt(dist) {

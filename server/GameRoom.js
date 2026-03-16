@@ -1,6 +1,7 @@
 import { Player } from './Player.js';
 import { Bullet } from './Bullet.js';
 import { Grenade } from './Grenade.js';
+import { generateName } from './names.js';
 import { resolveAgainstWalls } from '../shared/collision.js';
 import { PLAYER_RADIUS, BULLET_RADIUS, PICKUP_RANGE, TICK_INTERVAL } from '../shared/constants.js';
 import { WEAPONS, AMMO_TYPES } from '../shared/weapons.js';
@@ -8,17 +9,23 @@ import { WEAPONS, AMMO_TYPES } from '../shared/weapons.js';
 const STATES = { WAITING: 'WAITING', COUNTDOWN: 'COUNTDOWN', ACTIVE: 'ACTIVE', ENDED: 'ENDED' };
 
 const LOOT_TABLE = [
-  { type: 'pistol', slot: 'gun', weight: 18 },
+  { type: 'pistol', slot: 'gun', weight: 16 },
   { type: 'shotgun', slot: 'gun', weight: 12 },
   { type: 'rifle', slot: 'gun', weight: 10 },
-  { type: 'frag', slot: 'grenade', weight: 12 },
-  { type: 'bandage', slot: 'heal', weight: 14 },
-  { type: 'pistol_ammo', slot: 'ammo', ammoType: 'pistol', weight: 12 },
-  { type: 'shotgun_ammo', slot: 'ammo', ammoType: 'shotgun', weight: 11 },
-  { type: 'rifle_ammo', slot: 'ammo', ammoType: 'rifle', weight: 11 },
+  { type: 'smg', slot: 'gun', weight: 10 },
+  { type: 'sniper', slot: 'gun', weight: 6 },
+  { type: 'frag', slot: 'grenade', weight: 10 },
+  { type: 'smoke', slot: 'grenade', weight: 8 },
+  { type: 'bandage', slot: 'heal', weight: 12 },
+  { type: 'medkit', slot: 'heal', weight: 6 },
+  { type: 'pistol_ammo', slot: 'ammo', ammoType: 'pistol', weight: 10 },
+  { type: 'shotgun_ammo', slot: 'ammo', ammoType: 'shotgun', weight: 9 },
+  { type: 'rifle_ammo', slot: 'ammo', ammoType: 'rifle', weight: 9 },
+  { type: 'smg_ammo', slot: 'ammo', ammoType: 'smg', weight: 10 },
+  { type: 'sniper_ammo', slot: 'ammo', ammoType: 'sniper', weight: 8 },
 ];
 
-const ITEMS_PER_SLOT = 2; // spawn multiple items per loot slot for higher density
+const ITEMS_PER_SLOT = 2;
 
 let nextItemId = 0;
 
@@ -32,11 +39,14 @@ export class GameRoom {
     this.bullets = [];
     this.grenades = [];
     this.groundItems = [];
+    this.smokes = [];
     this.tick = 0;
     this.gameStartTime = null;
     this.tickInterval = null;
     this.lastTickTime = null;
     this.autoStartTimer = null;
+    this.usedNames = new Set();
+    this.finishedPlayers = [];
 
     this.allWalls = [...map.walls];
     for (const b of map.buildings) {
@@ -59,7 +69,9 @@ export class GameRoom {
 
   addPlayer(socket) {
     const spawn = this._pickSpawn();
-    const player = new Player(socket.id, spawn.x, spawn.y);
+    const name = generateName(this.usedNames);
+    this.usedNames.add(name);
+    const player = new Player(socket.id, spawn.x, spawn.y, name);
     this.players.set(socket.id, player);
     socket.join(this.id);
 
@@ -85,16 +97,17 @@ export class GameRoom {
 
     socket.on('pickup', () => {
       const p = this.players.get(socket.id);
-      if (!p || !p.alive || this.state !== STATES.ACTIVE) return;
+      if (!p || !p.alive || p.healing || this.state !== STATES.ACTIVE) return;
       this._handlePickup(p);
     });
 
     socket.on('throwGrenade', () => {
       const p = this.players.get(socket.id);
-      if (!p || !p.alive || !p.grenade || p.grenade.count <= 0 || this.state !== STATES.ACTIVE) return;
+      if (!p || !p.alive || !p.grenade || p.grenade.count <= 0 || p.healing || this.state !== STATES.ACTIVE) return;
+      const grenType = p.grenade.type;
       p.grenade.count--;
       if (p.grenade.count <= 0) p.grenade = null;
-      this.grenades.push(new Grenade(p.id, p.x, p.y, p.angle));
+      this.grenades.push(new Grenade(p.id, p.x, p.y, p.angle, grenType));
     });
 
     socket.on('useHeal', () => {
@@ -102,7 +115,8 @@ export class GameRoom {
       if (!p || !p.alive || !p.heal || p.heal.count <= 0 || p.healing || p.reloading || this.state !== STATES.ACTIVE) return;
       if (p.health >= 100) return;
       p.healing = true;
-      p.healingUntil = Date.now() + 1500;
+      const healTime = p.heal.type === 'medkit' ? 4000 : 1500;
+      p.healingUntil = Date.now() + healTime;
     });
 
     socket.on('reload', () => {
@@ -112,6 +126,26 @@ export class GameRoom {
       if (p.ammoReserve[p.gun.type] <= 0) return;
       p.reloading = true;
       p.reloadingUntil = Date.now() + WEAPONS[p.gun.type].reloadTime;
+    });
+
+    socket.on('sniperFire', (data) => {
+      const p = this.players.get(socket.id);
+      if (!p || !p.alive || !p.gun || p.gun.type !== 'sniper' || p.healing || p.reloading) return;
+      if (this.state !== STATES.ACTIVE) return;
+
+      const weapon = WEAPONS.sniper;
+      const now = Date.now();
+      const cooldown = 1000 / weapon.fireRate;
+      if (now - p.lastShotTime < cooldown) return;
+      if (p.gun.magAmmo <= 0) return;
+
+      p.lastShotTime = now;
+      p.gun.magAmmo--;
+
+      const bullet = new Bullet(p.id, p.x, p.y, data.angle || p.angle, weapon);
+      bullet.originX = p.x;
+      bullet.originY = p.y;
+      this.bullets.push(bullet);
     });
 
     socket.on('disconnect', () => {
@@ -134,10 +168,23 @@ export class GameRoom {
     if (player && player.alive && this.state === STATES.ACTIVE) {
       player.alive = false;
       player.health = 0;
+      const alivePlayers = [...this.players.values()].filter(p => p.alive);
+      player.placement = alivePlayers.length + 1;
+      this.finishedPlayers.push({
+        name: player.name,
+        placement: player.placement,
+        kills: player.kills,
+        damageDealt: Math.round(player.damageDealt)
+      });
       this._dropItems(player);
-      this.io.to(this.id).emit('playerKilled', { victimId: socketId, killerId: null });
+      this.io.to(this.id).emit('playerKilled', {
+        victimId: socketId, killerId: null,
+        victimName: player.name, killerName: null,
+        cause: 'disconnect'
+      });
       this._checkWin();
     }
+    if (player) this.usedNames.delete(player.name);
     this.players.delete(socketId);
 
     if (this.players.size < 2 && this.autoStartTimer) {
@@ -205,7 +252,6 @@ export class GameRoom {
             if (roll <= 0) { picked = entry; break; }
           }
 
-          // Spread items slightly so they don't stack perfectly
           const offsetX = (n === 0) ? 0 : (Math.random() - 0.5) * 30;
           const offsetY = (n === 0) ? 0 : (Math.random() - 0.5) * 30;
 
@@ -236,7 +282,7 @@ export class GameRoom {
     let nearest = null;
     let nearestDist = Infinity;
     for (const item of this.groundItems) {
-      if (item.slot === 'ammo') continue; // ammo auto-collects, not E key
+      if (item.slot === 'ammo') continue;
       const dx = item.x - player.x;
       const dy = item.y - player.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -260,7 +306,6 @@ export class GameRoom {
         });
       }
       player.gun = { type: nearest.type, magAmmo: nearest.magAmmo || WEAPONS[nearest.type].magSize };
-      // Cancel reload if switching guns
       player.reloading = false;
       player.reloadingUntil = 0;
     } else if (nearest.slot === 'grenade') {
@@ -279,8 +324,12 @@ export class GameRoom {
         player.grenade = { type: nearest.type, count: nearest.count || 1 };
       }
     } else if (nearest.slot === 'heal') {
-      if (player.heal && player.heal.type === nearest.type && player.heal.count < 5) {
-        player.heal.count = Math.min(5, player.heal.count + (nearest.count || 1));
+      const maxStack = nearest.type === 'medkit' ? 1 : 5;
+      if (player.heal && player.heal.type === nearest.type && player.heal.count >= maxStack) {
+        return; // stack full
+      }
+      if (player.heal && player.heal.type === nearest.type) {
+        player.heal.count = Math.min(maxStack, player.heal.count + (nearest.count || 1));
       } else if (player.heal) {
         this.groundItems.push({
           id: `item_${nextItemId++}`,
@@ -315,18 +364,17 @@ export class GameRoom {
       if (!player.alive) return;
       const inp = player.input;
 
-      // Cancel healing/reloading if moving or shooting
-      if (player.healing && (inp.up || inp.down || inp.left || inp.right || inp.shooting)) {
-        player.healing = false;
-        player.healingUntil = 0;
-      }
+      // Reloading: cancel on movement (unchanged)
       if (player.reloading && (inp.up || inp.down || inp.left || inp.right)) {
         player.reloading = false;
         player.reloadingUntil = 0;
       }
 
-      // Skip movement if healing or reloading
-      if (player.healing || player.reloading) return;
+      // Skip movement if reloading
+      if (player.reloading) return;
+
+      // Healing: uncancellable, slow movement
+      const speedMultiplier = player.healing ? 0.3 : 1.0;
 
       let dx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
       let dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
@@ -335,8 +383,8 @@ export class GameRoom {
         dx /= len;
         dy /= len;
       }
-      player.x += dx * player.speed * dt;
-      player.y += dy * player.speed * dt;
+      player.x += dx * player.speed * speedMultiplier * dt;
+      player.y += dy * player.speed * speedMultiplier * dt;
 
       const resolved = resolveAgainstWalls(player.x, player.y, player.radius, this.allWalls);
       player.x = resolved.x;
@@ -363,9 +411,10 @@ export class GameRoom {
       }
     }
 
-    // 2. Process shooting
+    // 2. Process shooting (not sniper — sniper uses sniperFire event)
     this.players.forEach((player) => {
       if (!player.alive || !player.input.shooting || !player.gun || player.healing || player.reloading) return;
+      if (player.gun.type === 'sniper') return; // sniper uses sniperFire event
 
       const weapon = WEAPONS[player.gun.type];
       if (!weapon) return;
@@ -380,8 +429,12 @@ export class GameRoom {
       for (let i = 0; i < weapon.pellets; i++) {
         let angle = player.angle;
         if (weapon.pellets > 1) {
+          // Shotgun: evenly distributed spread
           const step = (weapon.spread * 2) / (weapon.pellets - 1);
           angle = player.angle - weapon.spread + step * i;
+        } else if (weapon.spread > 0) {
+          // SMG: random spread per bullet
+          angle += (Math.random() - 0.5) * 2 * weapon.spread;
         }
         this.bullets.push(new Bullet(player.id, player.x, player.y, angle, weapon));
       }
@@ -397,7 +450,6 @@ export class GameRoom {
         continue;
       }
 
-      // Wall collision
       let hitWall = false;
       for (const wall of this.allWalls) {
         if (bullet.x >= wall.x && bullet.x <= wall.x + wall.w &&
@@ -411,7 +463,6 @@ export class GameRoom {
         continue;
       }
 
-      // Player collision
       let hitPlayer = false;
       this.players.forEach((player) => {
         if (hitPlayer || !player.alive || player.id === bullet.ownerId) return;
@@ -422,6 +473,10 @@ export class GameRoom {
           player.health -= bullet.damage;
           hitPlayer = true;
 
+          // Track damage
+          const attacker = this.players.get(bullet.ownerId);
+          if (attacker) attacker.damageDealt += bullet.damage;
+
           const victimSocket = this.io.sockets.sockets.get(player.id);
           if (victimSocket) {
             victimSocket.emit('playerHit', { damage: bullet.damage, angle: bullet.angle });
@@ -430,10 +485,14 @@ export class GameRoom {
           if (player.health <= 0) {
             player.health = 0;
             player.alive = false;
-            const attacker = this.players.get(bullet.ownerId);
             if (attacker) attacker.kills++;
+            this._recordElimination(player);
             this._dropItems(player);
-            this.io.to(this.id).emit('playerKilled', { victimId: player.id, killerId: bullet.ownerId });
+            this.io.to(this.id).emit('playerKilled', {
+              victimId: player.id, killerId: bullet.ownerId,
+              victimName: player.name, killerName: attacker ? attacker.name : 'Unknown',
+              cause: bullet.type
+            });
             this._checkWin();
           }
         }
@@ -448,6 +507,20 @@ export class GameRoom {
       const gren = this.grenades[i];
       gren.update(dt, this.allWalls);
 
+      // Smoke: activate immediately on stop
+      if (gren.shouldActivateSmoke()) {
+        this.smokes.push({
+          id: `smoke_${nextItemId++}`,
+          x: gren.x,
+          y: gren.y,
+          activatedAt: Date.now(),
+          duration: 7000
+        });
+        this.grenades.splice(i, 1);
+        continue;
+      }
+
+      // Frag: explode after fuse
       if (gren.shouldExplode()) {
         this.players.forEach((player) => {
           if (!player.alive) return;
@@ -461,6 +534,10 @@ export class GameRoom {
           const dmg = gren.getDamageAt(dist);
           player.health -= dmg;
 
+          // Track damage
+          const attacker = this.players.get(gren.ownerId);
+          if (attacker) attacker.damageDealt += dmg;
+
           const victimSocket = this.io.sockets.sockets.get(player.id);
           if (victimSocket) {
             victimSocket.emit('playerHit', { damage: dmg, angle: Math.atan2(dy, dx) });
@@ -469,10 +546,14 @@ export class GameRoom {
           if (player.health <= 0) {
             player.health = 0;
             player.alive = false;
-            const attacker = this.players.get(gren.ownerId);
             if (attacker) attacker.kills++;
+            this._recordElimination(player);
             this._dropItems(player);
-            this.io.to(this.id).emit('playerKilled', { victimId: player.id, killerId: gren.ownerId });
+            this.io.to(this.id).emit('playerKilled', {
+              victimId: player.id, killerId: gren.ownerId,
+              victimName: player.name, killerName: attacker ? attacker.name : 'Unknown',
+              cause: 'frag'
+            });
             this._checkWin();
           }
         });
@@ -480,11 +561,15 @@ export class GameRoom {
       }
     }
 
-    // 5. Update healing
+    // 4.5. Remove expired smokes
+    this.smokes = this.smokes.filter(s => Date.now() - s.activatedAt < s.duration);
+
+    // 5. Update healing (uncancellable)
     this.players.forEach((player) => {
       if (!player.alive || !player.healing) return;
       if (now >= player.healingUntil) {
-        player.health = Math.min(100, player.health + 25);
+        const healAmount = player.heal.type === 'medkit' ? 75 : 25;
+        player.health = Math.min(100, player.health + healAmount);
         player.healing = false;
         player.healingUntil = 0;
         if (player.heal) {
@@ -529,18 +614,20 @@ export class GameRoom {
           if (player.health <= 0) {
             player.health = 0;
             player.alive = false;
+            this._recordElimination(player);
             this._dropItems(player);
-            this.io.to(this.id).emit('playerKilled', { victimId: player.id, killerId: null });
+            this.io.to(this.id).emit('playerKilled', {
+              victimId: player.id, killerId: null,
+              victimName: player.name, killerName: null,
+              cause: 'zone'
+            });
             this._checkWin();
           }
         }
       });
     }
 
-    // 8. Check win condition
-    this._checkWin();
-
-    // 9. Broadcast state
+    // 8. Broadcast state
     this._broadcastState();
   }
 
@@ -556,12 +643,16 @@ export class GameRoom {
       tick: this.tick,
       lastProcessedInput,
       players,
-      bullets: this.bullets.map(b => ({ id: b.id, x: b.x, y: b.y, angle: b.angle, type: b.type, ownerId: b.ownerId })),
-      grenades: this.grenades.map(g => ({ id: g.id, x: g.x, y: g.y, explodeAt: g.explodeAt })),
+      bullets: this.bullets.map(b => ({
+        id: b.id, x: b.x, y: b.y, angle: b.angle, type: b.type, ownerId: b.ownerId,
+        originX: b.originX, originY: b.originY
+      })),
+      grenades: this.grenades.map(g => ({ id: g.id, x: g.x, y: g.y, explodeAt: g.explodeAt, type: g.type })),
       groundItems: this.groundItems.map(i => ({
         id: i.id, type: i.type, slot: i.slot, x: i.x, y: i.y,
         magAmmo: i.magAmmo, count: i.count, ammoType: i.ammoType, amount: i.amount
       })),
+      smokes: this.smokes.map(s => ({ id: s.id, x: s.x, y: s.y, activatedAt: s.activatedAt, duration: s.duration })),
       zone: {
         active: this.zone.active,
         centerX: this.zone.centerX,
@@ -574,6 +665,17 @@ export class GameRoom {
     };
 
     this.io.to(this.id).emit('gameState', snapshot);
+  }
+
+  _recordElimination(player) {
+    const alivePlayers = [...this.players.values()].filter(p => p.alive);
+    player.placement = alivePlayers.length + 1;
+    this.finishedPlayers.push({
+      name: player.name,
+      placement: player.placement,
+      kills: player.kills,
+      damageDealt: Math.round(player.damageDealt)
+    });
   }
 
   _dropItems(player) {
@@ -607,10 +709,11 @@ export class GameRoom {
       });
       player.heal = null;
     }
-    // Drop ammo reserves
     for (const [type, amount] of Object.entries(player.ammoReserve)) {
       if (amount > 0) {
-        const perPickup = AMMO_TYPES[type].perPickup;
+        const ammoType = AMMO_TYPES[type];
+        if (!ammoType) continue;
+        const perPickup = ammoType.perPickup;
         const itemCount = Math.ceil(amount / perPickup);
         for (let i = 0; i < itemCount; i++) {
           const dropAmount = Math.min(perPickup, amount - i * perPickup);
@@ -635,9 +738,19 @@ export class GameRoom {
       this.state = STATES.ENDED;
       clearInterval(this.tickInterval);
       const winner = alive.length === 1 ? alive[0] : null;
+      if (winner) {
+        winner.placement = 1;
+        this.finishedPlayers.push({
+          name: winner.name,
+          placement: 1,
+          kills: winner.kills,
+          damageDealt: Math.round(winner.damageDealt)
+        });
+      }
+      const standings = this.finishedPlayers.sort((a, b) => a.placement - b.placement);
       this.io.to(this.id).emit('gameOver', {
         winnerId: winner ? winner.id : null,
-        stats: winner ? { kills: winner.kills, survivalMs: Date.now() - this.gameStartTime } : null
+        standings
       });
     }
   }

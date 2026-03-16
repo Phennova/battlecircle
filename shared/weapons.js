@@ -34,11 +34,37 @@ export const WEAPONS = {
     pellets: 1,
     spread: 0,
     color: '#4a9eff'
+  },
+  smg: {
+    name: 'SMG',
+    fireRate: 10,
+    damage: 10,
+    range: 300,
+    magSize: 30,
+    reloadTime: 1200,
+    bulletSpeed: 600,
+    pellets: 1,
+    spread: 0.08,
+    color: '#e8e82e'
+  },
+  sniper: {
+    name: 'Sniper',
+    fireRate: 0.4,
+    damage: 80,
+    range: 1200,
+    magSize: 5,
+    reloadTime: 2000,
+    bulletSpeed: 1200,
+    pellets: 1,
+    spread: 0,
+    color: '#8b4513'
   }
 };
 
 export const AMMO_TYPES = {
   pistol: { name: 'Pistol Ammo', perPickup: 12, color: '#aaa', shape: 'square' },
   shotgun: { name: 'Shotgun Shells', perPickup: 6, color: '#ff8c42', shape: 'rect' },
-  rifle: { name: 'Rifle Rounds', perPickup: 8, color: '#4a9eff', shape: 'diamond' }
+  rifle: { name: 'Rifle Rounds', perPickup: 8, color: '#4a9eff', shape: 'diamond' },
+  smg: { name: 'SMG Ammo', perPickup: 20, color: '#e8e82e', shape: 'triangle' },
+  sniper: { name: 'Sniper Ammo', perPickup: 5, color: '#8b4513', shape: 'circledot' }
 };

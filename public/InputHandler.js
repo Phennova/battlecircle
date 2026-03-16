@@ -9,6 +9,12 @@ export class InputHandler {
     this._healPressed = false;
     this._reloadPressed = false;
 
+    // Sniper scope
+    this.sniperMode = false;
+    this.scopeStartTime = null;
+    this._sniperFirePending = false;
+    this._sniperFireAngle = 0;
+
     window.addEventListener('keydown', (e) => this._onKey(e, true));
     window.addEventListener('keyup', (e) => this._onKey(e, false));
     canvas.addEventListener('mousemove', (e) => this._onMouseMove(e));
@@ -21,7 +27,20 @@ export class InputHandler {
       case 'KeyS': case 'ArrowDown': this.keys.down = down; break;
       case 'KeyA': case 'ArrowLeft': this.keys.left = down; break;
       case 'KeyD': case 'ArrowRight': this.keys.right = down; break;
-      case 'Space': this.shooting = down; e.preventDefault(); break;
+      case 'Space':
+        e.preventDefault();
+        if (this.sniperMode) {
+          if (down && !this.scopeStartTime) {
+            this.scopeStartTime = performance.now();
+          } else if (!down && this.scopeStartTime) {
+            this._sniperFirePending = true;
+            this._sniperFireAngle = this.angle;
+            this.scopeStartTime = null;
+          }
+        } else {
+          this.shooting = down;
+        }
+        break;
       case 'KeyE': if (down) this._pickupPressed = true; break;
       case 'KeyG': if (down) this._grenadePressed = true; break;
       case 'KeyH': if (down) this._healPressed = true; break;
@@ -34,6 +53,20 @@ export class InputHandler {
     const mx = e.clientX - rect.left - this.canvas.width / 2;
     const my = e.clientY - rect.top - this.canvas.height / 2;
     this.angle = Math.atan2(my, mx);
+  }
+
+  setSniperMode(isSniper) {
+    if (this.sniperMode && !isSniper) {
+      // Exiting sniper mode, clear scope state
+      this.scopeStartTime = null;
+      this._sniperFirePending = false;
+    }
+    this.sniperMode = isSniper;
+  }
+
+  getScopeHoldTime() {
+    if (!this.sniperMode || !this.scopeStartTime) return 0;
+    return performance.now() - this.scopeStartTime;
   }
 
   getInput() {
@@ -65,5 +98,13 @@ export class InputHandler {
   consumeReload() {
     if (this._reloadPressed) { this._reloadPressed = false; return true; }
     return false;
+  }
+
+  consumeSniperFire() {
+    if (this._sniperFirePending) {
+      this._sniperFirePending = false;
+      return { angle: this._sniperFireAngle };
+    }
+    return null;
   }
 }

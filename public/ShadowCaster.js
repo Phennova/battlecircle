@@ -1,8 +1,7 @@
-import { VISION_RANGE } from '/shared/constants.js';
-
 export class ShadowCaster {
   constructor() {
     this.segments = [];
+    this._smokeSegmentCount = 0;
   }
 
   setWalls(wallRects) {
@@ -15,10 +14,34 @@ export class ShadowCaster {
     }
   }
 
-  computeVisibility(px, py) {
-    const range = VISION_RANGE;
+  addSmokeBlockers(smokes) {
+    const SIDES = 12;
+    this._smokeSegmentCount = smokes.length * SIDES;
+    for (const smoke of smokes) {
+      const r = 120;
+      for (let i = 0; i < SIDES; i++) {
+        const a1 = (Math.PI * 2 * i) / SIDES;
+        const a2 = (Math.PI * 2 * (i + 1)) / SIDES;
+        this.segments.push({
+          ax: smoke.x + Math.cos(a1) * r,
+          ay: smoke.y + Math.sin(a1) * r,
+          bx: smoke.x + Math.cos(a2) * r,
+          by: smoke.y + Math.sin(a2) * r
+        });
+      }
+    }
+  }
 
-    // Filter segments near the player
+  removeSmokeBlockers() {
+    if (this._smokeSegmentCount > 0) {
+      this.segments.splice(this.segments.length - this._smokeSegmentCount, this._smokeSegmentCount);
+      this._smokeSegmentCount = 0;
+    }
+  }
+
+  computeVisibility(px, py, visionRange) {
+    const range = visionRange || 600;
+
     const nearby = [];
     for (const seg of this.segments) {
       const minX = Math.min(seg.ax, seg.bx);
@@ -30,7 +53,6 @@ export class ShadowCaster {
       nearby.push(seg);
     }
 
-    // Add boundary segments (vision range box)
     const bx1 = px - range, by1 = py - range;
     const bx2 = px + range, by2 = py + range;
     nearby.push({ ax: bx1, ay: by1, bx: bx2, by: by1 });
@@ -38,7 +60,6 @@ export class ShadowCaster {
     nearby.push({ ax: bx2, ay: by2, bx: bx1, by: by2 });
     nearby.push({ ax: bx1, ay: by2, bx: bx1, by: by1 });
 
-    // Collect unique angles from all endpoints
     const angles = new Set();
     const eps = 0.00001;
     for (const seg of nearby) {
@@ -54,7 +75,6 @@ export class ShadowCaster {
 
     const sortedAngles = [...angles].sort((a, b) => a - b);
 
-    // Cast ray for each angle, find nearest intersection
     const points = [];
     for (const angle of sortedAngles) {
       const rdx = Math.cos(angle);

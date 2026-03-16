@@ -89,7 +89,7 @@ export class Renderer {
     ctx.drawImage(shadowCanvas, 0, 0);
   }
 
-  drawPlayer(x, y, angle, radius, color, health, maxHealth, gunType) {
+  drawPlayer(x, y, angle, radius, color, health, maxHealth, gunType, name) {
     const { ctx } = this;
 
     // Draw held weapon behind or in front of player depending on angle
@@ -123,6 +123,16 @@ export class Renderer {
       ctx.fillRect(barX, barY, barW, barH);
       ctx.fillStyle = pct > 0.5 ? '#50c878' : pct > 0.25 ? '#ffc832' : '#ff4444';
       ctx.fillRect(barX, barY, barW * pct, barH);
+    }
+
+    // Name tag
+    if (name) {
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      const nameY = health < maxHealth ? (y - radius - 16) : (y - radius - 8);
+      ctx.fillText(name, x, nameY);
     }
   }
 
@@ -162,6 +172,24 @@ export class Renderer {
       ctx.fillRect(radius + 24, -4, 6, 7);         // muzzle
       ctx.fillStyle = '#668';
       ctx.fillRect(radius + 8, -7, 10, 4);         // scope
+    } else if (gunType === 'smg') {
+      ctx.fillStyle = '#888';
+      ctx.fillRect(radius - 2, -3, 14, 6);
+      ctx.fillStyle = metalColor;
+      ctx.fillRect(radius + 10, -4, 6, 8);
+      ctx.fillStyle = '#e8e82e';
+      ctx.fillRect(radius + 2, 3, 5, 8);
+    } else if (gunType === 'sniper') {
+      ctx.fillStyle = '#6b4226';
+      ctx.fillRect(radius - 8, -3, 12, 6);
+      ctx.fillStyle = metalColor;
+      ctx.fillRect(radius + 4, -2, 30, 4);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(radius + 30, -3, 6, 6);
+      ctx.fillStyle = '#8b4513';
+      ctx.fillRect(radius + 8, -8, 12, 5);
+      ctx.fillStyle = '#a0522d';
+      ctx.fillRect(radius + 10, -7, 8, 2);
     }
 
     ctx.restore();
@@ -190,7 +218,9 @@ export class Renderer {
       shotgun: '#ff8c42',
       rifle: '#4a9eff',
       frag: '#ff6347',
-      bandage: '#50c878'
+      smoke: '#aaa',
+      bandage: '#50c878',
+      medkit: '#ff4444'
     };
 
     const glow = 0.3 + 0.15 * Math.sin(timestamp / 400);
@@ -227,13 +257,31 @@ export class Renderer {
           ctx.lineTo(item.x, item.y - 12);
           ctx.lineTo(item.x + 4, item.y - 12);
           ctx.stroke();
+        } else if (item.type === 'smoke') {
+          ctx.fillStyle = '#aaa';
+          ctx.globalAlpha = 0.7;
+          ctx.beginPath();
+          ctx.arc(item.x - 3, item.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(item.x + 3, item.y - 2, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(item.x, item.y + 3, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
         } else if (item.type === 'bandage') {
-          // Cross shape
           ctx.fillStyle = '#50c878';
           ctx.beginPath();
           ctx.arc(item.x, item.y, 9, 0, Math.PI * 2);
           ctx.fill();
           ctx.fillStyle = '#fff';
+          ctx.fillRect(item.x - 5, item.y - 1.5, 10, 3);
+          ctx.fillRect(item.x - 1.5, item.y - 5, 3, 10);
+        } else if (item.type === 'medkit') {
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(item.x - 8, item.y - 8, 16, 16);
+          ctx.fillStyle = '#ff4444';
           ctx.fillRect(item.x - 5, item.y - 1.5, 10, 3);
           ctx.fillRect(item.x - 1.5, item.y - 5, 3, 10);
         }
@@ -245,7 +293,7 @@ export class Renderer {
 
   _drawGroundGun(ctx, item, timestamp) {
     const glow = 0.25 + 0.15 * Math.sin(timestamp / 400);
-    const COLORS = { pistol: '#aaa', shotgun: '#ff8c42', rifle: '#4a9eff' };
+    const COLORS = { pistol: '#aaa', shotgun: '#ff8c42', rifle: '#4a9eff', smg: '#e8e82e', sniper: '#8b4513' };
     const color = COLORS[item.type] || '#aaa';
 
     // Glow circle
@@ -292,6 +340,22 @@ export class Renderer {
       ctx.fillRect(item.x + 1, item.y - 6, 8, 3);         // scope
       ctx.fillStyle = '#779';
       ctx.fillRect(item.x + 3, item.y - 5, 4, 1);         // scope lens
+    } else if (item.type === 'smg') {
+      ctx.fillStyle = '#888';
+      ctx.fillRect(item.x - 6, item.y - 2, 14, 5);
+      ctx.fillStyle = '#555';
+      ctx.fillRect(item.x + 6, item.y - 3, 4, 6);
+      ctx.fillStyle = '#e8e82e';
+      ctx.fillRect(item.x - 1, item.y + 2, 4, 7);
+    } else if (item.type === 'sniper') {
+      ctx.fillStyle = '#6b4226';
+      ctx.fillRect(item.x - 10, item.y - 2, 6, 4);
+      ctx.fillStyle = '#444';
+      ctx.fillRect(item.x - 4, item.y - 2, 18, 3);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(item.x + 12, item.y - 3, 4, 5);
+      ctx.fillStyle = '#8b4513';
+      ctx.fillRect(item.x, item.y - 6, 8, 3);
     }
 
     // Border ring
@@ -303,7 +367,7 @@ export class Renderer {
   }
 
   _drawAmmoItem(ctx, item, timestamp) {
-    const AMMO_COLORS = { pistol: '#aaa', shotgun: '#ff8c42', rifle: '#4a9eff' };
+    const AMMO_COLORS = { pistol: '#aaa', shotgun: '#ff8c42', rifle: '#4a9eff', smg: '#e8e82e', sniper: '#8b4513' };
     const color = AMMO_COLORS[item.ammoType] || '#fff';
     const glow = 0.2 + 0.1 * Math.sin(timestamp / 400);
 
@@ -326,6 +390,22 @@ export class Renderer {
       ctx.lineTo(item.x, item.y + 5);
       ctx.lineTo(item.x - 4, item.y);
       ctx.closePath();
+      ctx.fill();
+    } else if (item.ammoType === 'smg') {
+      ctx.beginPath();
+      ctx.moveTo(item.x, item.y - 5);
+      ctx.lineTo(item.x + 5, item.y + 3);
+      ctx.lineTo(item.x - 5, item.y + 3);
+      ctx.closePath();
+      ctx.fill();
+    } else if (item.ammoType === 'sniper') {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(item.x, item.y, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(item.x, item.y, 2, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -399,5 +479,85 @@ export class Renderer {
     const alpha = 0.4 * (1 - elapsed / hitFlash.duration);
     this.ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
     this.ctx.fillRect(0, 0, canvasW, canvasH);
+  }
+
+  drawSmokeClouds(smokes, cameraX, cameraY, timestamp) {
+    const { ctx, canvas } = this;
+    ctx.save();
+    ctx.translate(canvas.width / 2 - cameraX, canvas.height / 2 - cameraY);
+
+    for (const smoke of smokes) {
+      const elapsed = Date.now() - smoke.activatedAt;
+      if (elapsed > smoke.duration) continue;
+
+      let opacity = 0.6;
+      const fadeStart = smoke.duration - 1000;
+      if (elapsed > fadeStart) {
+        opacity = 0.6 * (1 - (elapsed - fadeStart) / 1000);
+      }
+
+      for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 * i) / 8;
+        const wobble = Math.sin(timestamp / 800 + i * 1.2) * 15;
+        const cx = smoke.x + Math.cos(angle + timestamp / 3000) * (30 + wobble);
+        const cy = smoke.y + Math.sin(angle + timestamp / 3000) * (30 + wobble);
+        const r = 60 + Math.sin(timestamp / 600 + i) * 10;
+        const shade = 170 + Math.sin(i * 0.8) * 20;
+
+        ctx.fillStyle = `rgba(${shade}, ${shade}, ${shade}, ${opacity * 0.4})`;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = `rgba(180, 180, 180, ${opacity * 0.3})`;
+      ctx.beginPath();
+      ctx.arc(smoke.x, smoke.y, 100, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  drawTracers(bullets, tracerTrails, cameraX, cameraY, now) {
+    const { ctx, canvas } = this;
+    ctx.save();
+    ctx.translate(canvas.width / 2 - cameraX, canvas.height / 2 - cameraY);
+
+    for (const b of bullets) {
+      if (b.type === 'sniper' && b.originX != null) {
+        ctx.strokeStyle = 'rgba(255, 200, 100, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(b.originX, b.originY);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+    }
+
+    for (const t of tracerTrails) {
+      const elapsed = now - t.startTime;
+      if (elapsed > 500) continue;
+      const alpha = 0.5 * (1 - elapsed / 500);
+      ctx.strokeStyle = `rgba(255, 200, 100, ${alpha})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(t.originX, t.originY);
+      ctx.lineTo(t.endX, t.endY);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  drawScopeOverlay(ctx, canvasW, canvasH) {
+    ctx.strokeStyle = 'rgba(255, 200, 100, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(canvasW / 2 - 30, canvasH / 2);
+    ctx.lineTo(canvasW / 2 + 30, canvasH / 2);
+    ctx.moveTo(canvasW / 2, canvasH / 2 - 30);
+    ctx.lineTo(canvasW / 2, canvasH / 2 + 30);
+    ctx.stroke();
   }
 }
