@@ -4,6 +4,7 @@ import { ShadowCaster } from './ShadowCaster.js';
 import { HUD } from './HUD.js';
 import { PLAYER_RADIUS, PLAYER_SPEED, PLAYER_HP } from '/shared/constants.js';
 import { resolveAgainstWalls } from '/shared/collision.js';
+import { WEAPONS } from '/shared/weapons.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -343,7 +344,7 @@ function loop(timestamp) {
             warning = { text: 'No weapon', time: performance.now() };
           } else if (me.gun.magAmmo >= me.gun.magSize) {
             warning = { text: 'Magazine full', time: performance.now() };
-          } else if ((me.ammoReserve[me.gun.type] || 0) <= 0) {
+          } else if ((me.ammoReserve[WEAPONS[me.gun.type].ammoType] || 0) <= 0) {
             warning = { text: 'No ammo', time: performance.now() };
           } else {
             socket.emit('reload');
@@ -370,7 +371,7 @@ function loop(timestamp) {
       // Warn on shooting with no ammo (non-sniper)
       if (inp.shooting && !isSniper && me.gun && me.gun.magAmmo <= 0) {
         if (!warning || performance.now() - warning.time > 1500) {
-          if ((me.ammoReserve[me.gun.type] || 0) > 0) {
+          if ((me.ammoReserve[WEAPONS[me.gun.type].ammoType] || 0) > 0) {
             warning = { text: 'Reload [R]', time: performance.now() };
           } else {
             warning = { text: 'No ammo', time: performance.now() };
@@ -390,7 +391,7 @@ function loop(timestamp) {
           socket.emit('sniperFire', { angle: sniperFire.angle });
           lastSniperFireTime = performance.now();
         } else if (me.gun && me.gun.magAmmo <= 0) {
-          if ((me.ammoReserve.sniper || 0) > 0) {
+          if ((me.ammoReserve.heavy || 0) > 0) {
             warning = { text: 'Reload [R]', time: performance.now() };
           } else {
             warning = { text: 'No ammo', time: performance.now() };

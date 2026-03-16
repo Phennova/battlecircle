@@ -339,57 +339,68 @@ export class HUD {
   }
 
   _drawAmmoReserves(ctx, canvasW, canvasH, ammoReserve, equippedGunType) {
-    const x = canvasW - 130;
-    let y = canvasH / 2 - 80;
+    const x = canvasW - 140;
+    let y = canvasH / 2 - 50;
+
+    // Determine which ammo type the equipped weapon uses
+    const equippedAmmoType = equippedGunType && WEAPONS[equippedGunType]
+      ? WEAPONS[equippedGunType].ammoType : null;
+
     const types = [
-      { key: 'pistol', name: 'Pistol', color: '#aaa' },
-      { key: 'shotgun', name: 'Shotgun', color: '#ff8c42' },
-      { key: 'rifle', name: 'Rifle', color: '#4a9eff' },
-      { key: 'smg', name: 'SMG', color: '#e8e82e' },
-      { key: 'sniper', name: 'Sniper', color: '#8b4513' }
+      { key: 'light', name: 'Light Ammo', color: '#e8d44d' },
+      { key: 'shells', name: 'Shells', color: '#ff8c42' },
+      { key: 'heavy', name: 'Heavy Ammo', color: '#5a7fa8' }
     ];
 
     for (const t of types) {
-      const isActive = equippedGunType === t.key;
+      const isActive = equippedAmmoType === t.key;
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(x, y - 10, 115, 22);
+      ctx.fillRect(x, y - 10, 125, 24);
 
+      // Mini ammo icon
       ctx.fillStyle = t.color;
-      if (t.key === 'pistol') {
-        ctx.fillRect(x + 8, y - 3, 6, 6);
-      } else if (t.key === 'shotgun') {
-        ctx.fillRect(x + 6, y - 2, 10, 5);
-      } else if (t.key === 'rifle') {
+      if (t.key === 'light') {
+        // Small bullet
+        ctx.fillStyle = '#d4a843';
+        ctx.fillRect(x + 8, y - 3, 3, 6);
+        ctx.fillStyle = '#c87533';
         ctx.beginPath();
-        ctx.moveTo(x + 11, y - 4);
-        ctx.lineTo(x + 15, y);
-        ctx.lineTo(x + 11, y + 4);
-        ctx.lineTo(x + 7, y);
+        ctx.moveTo(x + 8, y - 3);
+        ctx.lineTo(x + 9.5, y - 6);
+        ctx.lineTo(x + 11, y - 3);
         ctx.closePath();
         ctx.fill();
-      } else if (t.key === 'smg') {
+      } else if (t.key === 'shells') {
+        // Shell
+        ctx.fillStyle = '#cc4422';
+        ctx.fillRect(x + 7, y - 4, 5, 6);
+        ctx.fillStyle = '#d4a843';
+        ctx.fillRect(x + 7, y + 2, 5, 2);
+      } else if (t.key === 'heavy') {
+        // Big bullet
+        ctx.fillStyle = '#8a9bb0';
+        ctx.fillRect(x + 8, y - 2, 4, 7);
+        ctx.fillStyle = '#6a7d8e';
         ctx.beginPath();
-        ctx.moveTo(x + 11, y - 4);
-        ctx.lineTo(x + 16, y + 2);
-        ctx.lineTo(x + 6, y + 2);
+        ctx.moveTo(x + 8, y - 2);
+        ctx.lineTo(x + 10, y - 6);
+        ctx.lineTo(x + 12, y - 2);
         ctx.closePath();
-        ctx.fill();
-      } else if (t.key === 'sniper') {
-        ctx.beginPath();
-        ctx.arc(x + 11, y, 4, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(x + 11, y, 1.5, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      ctx.fillStyle = isActive ? '#fff' : '#888';
-      ctx.font = isActive ? 'bold 13px sans-serif' : '12px sans-serif';
-      ctx.textAlign = 'right';
+      // Label
+      ctx.fillStyle = isActive ? '#fff' : '#777';
+      ctx.font = isActive ? 'bold 11px sans-serif' : '11px sans-serif';
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`${ammoReserve[t.key] || 0}`, x + 108, y);
+      ctx.fillText(t.name, x + 20, y);
 
-      y += 24;
+      // Count
+      ctx.textAlign = 'right';
+      ctx.fillText(`${ammoReserve[t.key] || 0}`, x + 118, y);
+
+      y += 28;
     }
   }
 
@@ -486,7 +497,8 @@ export class HUD {
     const NAMES = {
       pistol: 'Pistol', shotgun: 'Shotgun', rifle: 'Rifle', smg: 'SMG', sniper: 'Sniper',
       frag: 'Frag Grenade', smoke: 'Smoke Grenade',
-      bandage: 'Bandage', medkit: 'MedKit'
+      bandage: 'Bandage', medkit: 'MedKit',
+      light_ammo: 'Light Ammo', shells_ammo: 'Shotgun Shells', heavy_ammo: 'Heavy Ammo'
     };
     const name = NAMES[nearest.type] || nearest.type;
 

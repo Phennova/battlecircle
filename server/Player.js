@@ -17,7 +17,7 @@ export class Player {
     this.gun = null;
     this.grenade = null;
     this.heal = null;
-    this.ammoReserve = { pistol: 0, shotgun: 0, rifle: 0, smg: 0, sniper: 0 };
+    this.ammoReserve = { light: 0, shells: 0, heavy: 0 };
 
     // Input state
     this.input = {

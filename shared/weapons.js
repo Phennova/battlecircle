@@ -9,7 +9,8 @@ export const WEAPONS = {
     bulletSpeed: 500,
     pellets: 1,
     spread: 0,
-    color: '#aaa'
+    color: '#aaa',
+    ammoType: 'light'
   },
   shotgun: {
     name: 'Shotgun',
@@ -21,7 +22,8 @@ export const WEAPONS = {
     bulletSpeed: 450,
     pellets: 5,
     spread: 0.15,
-    color: '#ff8c42'
+    color: '#ff8c42',
+    ammoType: 'shells'
   },
   rifle: {
     name: 'Rifle',
@@ -33,7 +35,8 @@ export const WEAPONS = {
     bulletSpeed: 1200,
     pellets: 1,
     spread: 0,
-    color: '#4a9eff'
+    color: '#4a9eff',
+    ammoType: 'heavy'
   },
   smg: {
     name: 'SMG',
@@ -45,7 +48,8 @@ export const WEAPONS = {
     bulletSpeed: 600,
     pellets: 1,
     spread: 0.08,
-    color: '#e8e82e'
+    color: '#e8e82e',
+    ammoType: 'light'
   },
   sniper: {
     name: 'Sniper',
@@ -57,14 +61,13 @@ export const WEAPONS = {
     bulletSpeed: 1800,
     pellets: 1,
     spread: 0,
-    color: '#8b4513'
+    color: '#8b4513',
+    ammoType: 'heavy'
   }
 };
 
 export const AMMO_TYPES = {
-  pistol: { name: 'Pistol Ammo', perPickup: 12, color: '#aaa', shape: 'square' },
-  shotgun: { name: 'Shotgun Shells', perPickup: 6, color: '#ff8c42', shape: 'rect' },
-  rifle: { name: 'Rifle Rounds', perPickup: 8, color: '#4a9eff', shape: 'diamond' },
-  smg: { name: 'SMG Ammo', perPickup: 20, color: '#e8e82e', shape: 'triangle' },
-  sniper: { name: 'Sniper Ammo', perPickup: 5, color: '#8b4513', shape: 'circledot' }
+  light: { name: 'Light Ammo', perPickup: 15, color: '#e8d44d' },
+  shells: { name: 'Shotgun Shells', perPickup: 8, color: '#ff8c42' },
+  heavy: { name: 'Heavy Ammo', perPickup: 10, color: '#5a7fa8' }
 };

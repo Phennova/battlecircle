@@ -18,11 +18,9 @@ const LOOT_TABLE = [
   { type: 'smoke', slot: 'grenade', weight: 8 },
   { type: 'bandage', slot: 'heal', weight: 12 },
   { type: 'medkit', slot: 'heal', weight: 6 },
-  { type: 'pistol_ammo', slot: 'ammo', ammoType: 'pistol', weight: 10 },
-  { type: 'shotgun_ammo', slot: 'ammo', ammoType: 'shotgun', weight: 9 },
-  { type: 'rifle_ammo', slot: 'ammo', ammoType: 'rifle', weight: 9 },
-  { type: 'smg_ammo', slot: 'ammo', ammoType: 'smg', weight: 10 },
-  { type: 'sniper_ammo', slot: 'ammo', ammoType: 'sniper', weight: 8 },
+  { type: 'light_ammo', slot: 'ammo', ammoType: 'light', weight: 14 },
+  { type: 'shells_ammo', slot: 'ammo', ammoType: 'shells', weight: 12 },
+  { type: 'heavy_ammo', slot: 'ammo', ammoType: 'heavy', weight: 12 },
 ];
 
 const ITEMS_PER_SLOT = 2;
@@ -122,8 +120,9 @@ export class GameRoom {
     socket.on('reload', () => {
       const p = this.players.get(socket.id);
       if (!p || !p.alive || !p.gun || p.reloading || p.healing) return;
-      if (p.gun.magAmmo >= WEAPONS[p.gun.type].magSize) return;
-      if (p.ammoReserve[p.gun.type] <= 0) return;
+      const weapon = WEAPONS[p.gun.type];
+      if (p.gun.magAmmo >= weapon.magSize) return;
+      if (p.ammoReserve[weapon.ammoType] <= 0) return;
       p.reloading = true;
       p.reloadingUntil = Date.now() + WEAPONS[p.gun.type].reloadTime;
     });
@@ -576,10 +575,10 @@ export class GameRoom {
       if (now >= player.reloadingUntil) {
         const weapon = WEAPONS[player.gun.type];
         const needed = weapon.magSize - player.gun.magAmmo;
-        const available = player.ammoReserve[player.gun.type];
+        const available = player.ammoReserve[weapon.ammoType];
         const toLoad = Math.min(needed, available);
         player.gun.magAmmo += toLoad;
-        player.ammoReserve[player.gun.type] -= toLoad;
+        player.ammoReserve[weapon.ammoType] -= toLoad;
         player.reloading = false;
         player.reloadingUntil = 0;
       }

@@ -376,46 +376,76 @@ export class Renderer {
   }
 
   _drawAmmoItem(ctx, item, timestamp) {
-    const AMMO_COLORS = { pistol: '#aaa', shotgun: '#ff8c42', rifle: '#4a9eff', smg: '#e8e82e', sniper: '#8b4513' };
+    const AMMO_COLORS = { light: '#e8d44d', shells: '#ff8c42', heavy: '#5a7fa8' };
     const color = AMMO_COLORS[item.ammoType] || '#fff';
     const glow = 0.2 + 0.1 * Math.sin(timestamp / 400);
 
+    // Glow
     ctx.fillStyle = color;
     ctx.globalAlpha = glow;
     ctx.beginPath();
-    ctx.arc(item.x, item.y, 10, 0, Math.PI * 2);
+    ctx.arc(item.x, item.y, 12, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    ctx.fillStyle = color;
-    if (item.ammoType === 'pistol') {
-      ctx.fillRect(item.x - 4, item.y - 4, 8, 8);
-    } else if (item.ammoType === 'shotgun') {
-      ctx.fillRect(item.x - 6, item.y - 3, 12, 6);
-    } else if (item.ammoType === 'rifle') {
-      ctx.beginPath();
-      ctx.moveTo(item.x, item.y - 5);
-      ctx.lineTo(item.x + 4, item.y);
-      ctx.lineTo(item.x, item.y + 5);
-      ctx.lineTo(item.x - 4, item.y);
-      ctx.closePath();
-      ctx.fill();
-    } else if (item.ammoType === 'smg') {
-      ctx.beginPath();
-      ctx.moveTo(item.x, item.y - 5);
-      ctx.lineTo(item.x + 5, item.y + 3);
-      ctx.lineTo(item.x - 5, item.y + 3);
-      ctx.closePath();
-      ctx.fill();
-    } else if (item.ammoType === 'sniper') {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(item.x, item.y, 5, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(item.x, item.y, 2, 0, Math.PI * 2);
-      ctx.fill();
+    if (item.ammoType === 'light') {
+      // Small bullet cartridges — 3 little bullets in a row
+      for (let i = -1; i <= 1; i++) {
+        const bx = item.x + i * 5;
+        // Casing (brass)
+        ctx.fillStyle = '#d4a843';
+        ctx.fillRect(bx - 1.5, item.y - 2, 3, 7);
+        // Tip (copper)
+        ctx.fillStyle = '#c87533';
+        ctx.beginPath();
+        ctx.moveTo(bx - 1.5, item.y - 2);
+        ctx.lineTo(bx, item.y - 5);
+        ctx.lineTo(bx + 1.5, item.y - 2);
+        ctx.closePath();
+        ctx.fill();
+        // Primer (bottom circle)
+        ctx.fillStyle = '#b8942e';
+        ctx.beginPath();
+        ctx.arc(bx, item.y + 5, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (item.ammoType === 'shells') {
+      // Shotgun shells — 2 fat cylinders side by side
+      for (let i = -1; i <= 0; i++) {
+        const sx = item.x + i * 7 + 3;
+        // Shell body (red/orange)
+        ctx.fillStyle = '#cc4422';
+        ctx.fillRect(sx - 3, item.y - 5, 6, 8);
+        // Brass base
+        ctx.fillStyle = '#d4a843';
+        ctx.fillRect(sx - 3, item.y + 3, 6, 3);
+        // Top crimp
+        ctx.fillStyle = '#aa3318';
+        ctx.beginPath();
+        ctx.arc(sx, item.y - 5, 3, Math.PI, 0);
+        ctx.fill();
+      }
+    } else if (item.ammoType === 'heavy') {
+      // Large rifle/sniper cartridge — 2 bigger bullets
+      for (let i = -1; i <= 0; i++) {
+        const bx = item.x + i * 7 + 3;
+        // Casing (brass, longer)
+        ctx.fillStyle = '#8a9bb0';
+        ctx.fillRect(bx - 2, item.y - 1, 4, 8);
+        // Tip (pointed, steel-colored)
+        ctx.fillStyle = '#6a7d8e';
+        ctx.beginPath();
+        ctx.moveTo(bx - 2, item.y - 1);
+        ctx.lineTo(bx, item.y - 7);
+        ctx.lineTo(bx + 2, item.y - 1);
+        ctx.closePath();
+        ctx.fill();
+        // Primer
+        ctx.fillStyle = '#b8942e';
+        ctx.beginPath();
+        ctx.arc(bx, item.y + 7, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
