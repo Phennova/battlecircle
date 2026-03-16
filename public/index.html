@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BattleCircle</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+    canvas#game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    #lobby {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.85);
+      color: #fff;
+      font-family: sans-serif;
+      z-index: 10;
+    }
+    #lobby h1 { font-size: 48px; margin-bottom: 20px; }
+    #lobby .status { color: #888; margin-bottom: 20px; }
+    #lobby button {
+      padding: 12px 32px;
+      font-size: 18px;
+      background: #4a9eff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #lobby button:hover { background: #3a8eef; }
+    #lobby button:disabled { background: #555; cursor: not-allowed; }
+    #overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      font-family: sans-serif;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="lobby">
+    <h1>BattleCircle</h1>
+    <div class="status">Connecting...</div>
+    <button id="startBtn" disabled>Start Game</button>
+  </div>
+  <div id="overlay"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
