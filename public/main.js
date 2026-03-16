@@ -51,6 +51,9 @@ const effects = {
 };
 let lastSniperFireTime = 0;
 const killFeed = [];
+
+// Warnings
+let warning = null; // { text, time }
 const tracerTrails = [];
 
 // Player colors
@@ -325,19 +328,76 @@ function loop(timestamp) {
       const isSniper = me.gun && me.gun.type === 'sniper';
       inputHandler.setSniperMode(isSniper);
 
-      // Handle action keys (block during healing)
-      if (!me.healing) {
+      // Handle action keys (block during healing/reloading)
+      if (!me.healing && !me.reloading) {
         if (inputHandler.consumePickup()) socket.emit('pickup');
-        if (inputHandler.consumeGrenade()) socket.emit('throwGrenade');
-        if (inputHandler.consumeReload()) socket.emit('reload');
+        if (inputHandler.consumeGrenade()) {
+          if (me.grenade && me.grenade.count > 0) {
+            socket.emit('throwGrenade');
+          } else {
+            warning = { text: 'No grenades', time: performance.now() };
+          }
+        }
+        if (inputHandler.consumeReload()) {
+          if (!me.gun) {
+            warning = { text: 'No weapon', time: performance.now() };
+          } else if (me.gun.magAmmo >= me.gun.magSize) {
+            warning = { text: 'Magazine full', time: performance.now() };
+          } else if ((me.ammoReserve[me.gun.type] || 0) <= 0) {
+            warning = { text: 'No ammo', time: performance.now() };
+          } else {
+            socket.emit('reload');
+          }
+        }
+      } else {
+        // Consume inputs silently during healing/reloading
+        inputHandler.consumePickup();
+        inputHandler.consumeGrenade();
+        inputHandler.consumeReload();
       }
-      if (inputHandler.consumeHeal()) socket.emit('useHeal');
+      if (inputHandler.consumeHeal()) {
+        if (!me.healing && !me.reloading) {
+          if (me.heal && me.heal.count > 0 && me.health < 100) {
+            socket.emit('useHeal');
+          } else if (!me.heal || me.heal.count <= 0) {
+            warning = { text: 'No heals', time: performance.now() };
+          } else if (me.health >= 100) {
+            warning = { text: 'Full health', time: performance.now() };
+          }
+        }
+      }
+
+      // Warn on shooting with no ammo (non-sniper)
+      if (inp.shooting && !isSniper && me.gun && me.gun.magAmmo <= 0) {
+        if (!warning || performance.now() - warning.time > 1500) {
+          if ((me.ammoReserve[me.gun.type] || 0) > 0) {
+            warning = { text: 'Reload [R]', time: performance.now() };
+          } else {
+            warning = { text: 'No ammo', time: performance.now() };
+          }
+        }
+      }
+      if (inp.shooting && !isSniper && !me.gun) {
+        if (!warning || performance.now() - warning.time > 1500) {
+          warning = { text: 'No weapon', time: performance.now() };
+        }
+      }
 
       // Sniper fire
       const sniperFire = inputHandler.consumeSniperFire();
-      if (sniperFire && !me.healing) {
-        socket.emit('sniperFire', { angle: sniperFire.angle });
-        lastSniperFireTime = performance.now();
+      if (sniperFire && !me.healing && !me.reloading) {
+        if (me.gun && me.gun.magAmmo > 0) {
+          socket.emit('sniperFire', { angle: sniperFire.angle });
+          lastSniperFireTime = performance.now();
+        } else if (me.gun && me.gun.magAmmo <= 0) {
+          if ((me.ammoReserve.sniper || 0) > 0) {
+            warning = { text: 'Reload [R]', time: performance.now() };
+          } else {
+            warning = { text: 'No ammo', time: performance.now() };
+          }
+        }
+      } else if (sniperFire) {
+        // consume silently
       }
 
       // Store input for prediction
@@ -351,7 +411,7 @@ function loop(timestamp) {
         dx /= len;
         dy /= len;
       }
-      const speedMult = me.healing ? 0.3 : 1.0;
+      const speedMult = (me.healing || me.reloading) ? 0.3 : 1.0;
       predictedX += dx * PLAYER_SPEED * speedMult * dt;
       predictedY += dy * PLAYER_SPEED * speedMult * dt;
       const resolved = resolveAgainstWalls(predictedX, predictedY, PLAYER_RADIUS, renderer.allWalls);
@@ -497,6 +557,8 @@ function loop(timestamp) {
       // HUD
       hud.draw(ctx, canvas.width, canvas.height, me, gameState);
       hud.drawKillFeed(ctx, canvas.width, killFeed, performance.now());
+      hud.drawWarning(ctx, canvas.width, canvas.height, warning, performance.now());
+      hud.drawItemTooltip(ctx, canvas.width, canvas.height, gameState.groundItems, viewX, viewY, cameraScale);
 
     } else if (spectating && spectateTargetId && gameState) {
       // Spectator rendering

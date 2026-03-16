@@ -448,6 +448,62 @@ export class HUD {
     ctx.fillText(text, canvasW / 2, canvasH / 2 + 50);
   }
 
+  drawWarning(ctx, canvasW, canvasH, warning, now) {
+    if (!warning) return;
+    const elapsed = now - warning.time;
+    const duration = 1500;
+    if (elapsed > duration) return;
+
+    const alpha = elapsed > duration - 500 ? (duration - elapsed) / 500 : 1;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(warning.text).width;
+    ctx.fillRect(canvasW / 2 - tw / 2 - 12, canvasH / 2 + 70, tw + 24, 28);
+    ctx.fillStyle = '#ff6b6b';
+    ctx.fillText(warning.text, canvasW / 2, canvasH / 2 + 84);
+    ctx.globalAlpha = 1;
+  }
+
+  drawItemTooltip(ctx, canvasW, canvasH, items, playerX, playerY, cameraScale) {
+    // Find nearest item within pickup range
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const item of items) {
+      if (item.slot === 'ammo') continue;
+      const dx = item.x - playerX;
+      const dy = item.y - playerY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 40 && dist < nearestDist) {
+        nearestDist = dist;
+        nearest = item;
+      }
+    }
+    if (!nearest) return;
+
+    const NAMES = {
+      pistol: 'Pistol', shotgun: 'Shotgun', rifle: 'Rifle', smg: 'SMG', sniper: 'Sniper',
+      frag: 'Frag Grenade', smoke: 'Smoke Grenade',
+      bandage: 'Bandage', medkit: 'MedKit'
+    };
+    const name = NAMES[nearest.type] || nearest.type;
+
+    const scale = cameraScale || 1;
+    const screenX = canvasW / 2 + (nearest.x - playerX) * scale;
+    const screenY = canvasH / 2 + (nearest.y - playerY) * scale - 22 * scale;
+
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    const tw = ctx.measureText(`[E] ${name}`).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(screenX - tw / 2 - 6, screenY - 16, tw + 12, 20);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`[E] ${name}`, screenX, screenY);
+  }
+
   _roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
