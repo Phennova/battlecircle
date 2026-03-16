@@ -89,8 +89,14 @@ export class Renderer {
     ctx.drawImage(shadowCanvas, 0, 0);
   }
 
-  drawPlayer(x, y, angle, radius, color, health, maxHealth) {
+  drawPlayer(x, y, angle, radius, color, health, maxHealth, gunType) {
     const { ctx } = this;
+
+    // Draw held weapon behind or in front of player depending on angle
+    if (gunType) {
+      this._drawHeldWeapon(ctx, x, y, angle, radius, gunType);
+    }
+
     // Body circle
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -100,13 +106,11 @@ export class Renderer {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Direction indicator
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 3;
+    // Inner highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(angle) * (radius + 8), y + Math.sin(angle) * (radius + 8));
-    ctx.stroke();
+    ctx.arc(x - 3, y - 3, radius * 0.5, 0, Math.PI * 2);
+    ctx.fill();
 
     // Health bar
     if (health < maxHealth) {
@@ -120,6 +124,47 @@ export class Renderer {
       ctx.fillStyle = pct > 0.5 ? '#50c878' : pct > 0.25 ? '#ffc832' : '#ff4444';
       ctx.fillRect(barX, barY, barW * pct, barH);
     }
+  }
+
+  _drawHeldWeapon(ctx, px, py, angle, radius, gunType) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(angle);
+
+    const WEAPON_COLORS = { pistol: '#888', shotgun: '#a06030', rifle: '#556' };
+    const bodyColor = WEAPON_COLORS[gunType] || '#888';
+    const metalColor = '#444';
+
+    if (gunType === 'pistol') {
+      // Compact pistol shape
+      ctx.fillStyle = bodyColor;
+      ctx.fillRect(radius - 2, -3, 16, 6);        // barrel
+      ctx.fillStyle = metalColor;
+      ctx.fillRect(radius + 10, -4, 6, 8);         // muzzle
+      ctx.fillRect(radius, -5, 4, 3);               // sight
+    } else if (gunType === 'shotgun') {
+      // Wide shotgun
+      ctx.fillStyle = bodyColor;
+      ctx.fillRect(radius - 4, -4, 12, 8);         // stock/grip
+      ctx.fillStyle = metalColor;
+      ctx.fillRect(radius + 8, -3, 18, 6);         // barrel
+      ctx.fillStyle = '#333';
+      ctx.fillRect(radius + 22, -4, 6, 8);         // muzzle (wider)
+      ctx.fillStyle = bodyColor;
+      ctx.fillRect(radius + 4, -6, 8, 3);          // pump
+    } else if (gunType === 'rifle') {
+      // Long rifle
+      ctx.fillStyle = bodyColor;
+      ctx.fillRect(radius - 6, -3, 10, 6);         // stock
+      ctx.fillStyle = metalColor;
+      ctx.fillRect(radius + 4, -3, 24, 5);         // barrel
+      ctx.fillStyle = '#333';
+      ctx.fillRect(radius + 24, -4, 6, 7);         // muzzle
+      ctx.fillStyle = '#668';
+      ctx.fillRect(radius + 8, -7, 10, 4);         // scope
+    }
+
+    ctx.restore();
   }
 
   drawBullets(bullets, cameraX, cameraY) {
@@ -153,26 +198,108 @@ export class Renderer {
     for (const item of items) {
       if (item.slot === 'ammo') {
         this._drawAmmoItem(ctx, item, timestamp);
+      } else if (item.slot === 'gun') {
+        this._drawGroundGun(ctx, item, timestamp);
       } else {
+        // Grenades and bandages - colored circle with icon
         const color = EQUIP_COLORS[item.type] || '#fff';
-        // Glow
         ctx.fillStyle = color;
         ctx.globalAlpha = glow;
         ctx.beginPath();
         ctx.arc(item.x, item.y, 14, 0, Math.PI * 2);
         ctx.fill();
-        // Solid circle
         ctx.globalAlpha = 1;
-        ctx.beginPath();
-        ctx.arc(item.x, item.y, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+
+        if (item.type === 'frag') {
+          // Grenade shape
+          ctx.fillStyle = '#ff6347';
+          ctx.beginPath();
+          ctx.arc(item.x, item.y + 1, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#c42';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          // Pin
+          ctx.strokeStyle = '#ddd';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(item.x, item.y - 7);
+          ctx.lineTo(item.x, item.y - 12);
+          ctx.lineTo(item.x + 4, item.y - 12);
+          ctx.stroke();
+        } else if (item.type === 'bandage') {
+          // Cross shape
+          ctx.fillStyle = '#50c878';
+          ctx.beginPath();
+          ctx.arc(item.x, item.y, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(item.x - 5, item.y - 1.5, 10, 3);
+          ctx.fillRect(item.x - 1.5, item.y - 5, 3, 10);
+        }
       }
     }
 
     ctx.restore();
+  }
+
+  _drawGroundGun(ctx, item, timestamp) {
+    const glow = 0.25 + 0.15 * Math.sin(timestamp / 400);
+    const COLORS = { pistol: '#aaa', shotgun: '#ff8c42', rifle: '#4a9eff' };
+    const color = COLORS[item.type] || '#aaa';
+
+    // Glow circle
+    ctx.fillStyle = color;
+    ctx.globalAlpha = glow;
+    ctx.beginPath();
+    ctx.arc(item.x, item.y, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Dark backing plate
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.beginPath();
+    ctx.arc(item.x, item.y, 13, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (item.type === 'pistol') {
+      // Compact pistol
+      ctx.fillStyle = '#777';
+      ctx.fillRect(item.x - 3, item.y - 2, 10, 4);       // body
+      ctx.fillStyle = '#555';
+      ctx.fillRect(item.x + 5, item.y - 3, 5, 6);         // muzzle
+      ctx.fillStyle = '#666';
+      ctx.fillRect(item.x - 1, item.y + 1, 4, 6);         // grip
+    } else if (item.type === 'shotgun') {
+      // Wide shotgun
+      ctx.fillStyle = '#a06030';
+      ctx.fillRect(item.x - 8, item.y - 2, 8, 5);         // stock
+      ctx.fillStyle = '#555';
+      ctx.fillRect(item.x, item.y - 2, 12, 4);            // barrel
+      ctx.fillStyle = '#444';
+      ctx.fillRect(item.x + 10, item.y - 3, 4, 6);        // muzzle
+      ctx.fillStyle = '#906828';
+      ctx.fillRect(item.x - 2, item.y - 5, 6, 3);         // pump
+    } else if (item.type === 'rifle') {
+      // Long rifle with scope
+      ctx.fillStyle = '#556';
+      ctx.fillRect(item.x - 10, item.y - 2, 8, 4);        // stock
+      ctx.fillStyle = '#444';
+      ctx.fillRect(item.x - 2, item.y - 2, 16, 4);        // barrel
+      ctx.fillStyle = '#333';
+      ctx.fillRect(item.x + 12, item.y - 3, 4, 6);        // muzzle
+      ctx.fillStyle = '#668';
+      ctx.fillRect(item.x + 1, item.y - 6, 8, 3);         // scope
+      ctx.fillStyle = '#779';
+      ctx.fillRect(item.x + 3, item.y - 5, 4, 1);         // scope lens
+    }
+
+    // Border ring
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(item.x, item.y, 13, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   _drawAmmoItem(ctx, item, timestamp) {

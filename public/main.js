@@ -299,12 +299,14 @@ function loop(timestamp) {
         if (p.id === myId || !p.alive) return;
         const interp = getInterpolatedPlayer(p.id);
         if (shadowCaster.isVisible(interp.x, interp.y, visibility)) {
-          renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, COLORS[i % COLORS.length], interp.health, PLAYER_HP);
+          const otherGunType = interp.gun ? interp.gun.type : null;
+          renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, COLORS[i % COLORS.length], interp.health, PLAYER_HP, otherGunType);
         }
       });
 
       // Local player
-      renderer.drawPlayer(renderX, renderY, inp.angle, PLAYER_RADIUS, COLORS[playerIndex % COLORS.length], me.health, PLAYER_HP);
+      const myGunType = me.gun ? me.gun.type : null;
+      renderer.drawPlayer(renderX, renderY, inp.angle, PLAYER_RADIUS, COLORS[playerIndex % COLORS.length], me.health, PLAYER_HP, myGunType);
 
       ctx.restore();
 

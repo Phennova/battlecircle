@@ -79,7 +79,7 @@ export class HUD {
     if (slotType === 'gun') {
       const weapon = WEAPONS[item.type];
       const color = weapon ? weapon.color : '#aaa';
-      this._drawGunIcon(ctx, cx, cy, color);
+      this._drawGunIcon(ctx, cx, cy, color, item.type);
       ctx.fillStyle = color;
       ctx.font = '9px sans-serif';
       ctx.textAlign = 'center';
@@ -108,10 +108,36 @@ export class HUD {
     }
   }
 
-  _drawGunIcon(ctx, x, y, color) {
-    ctx.fillStyle = color;
-    ctx.fillRect(x - 12, y - 3, 24, 6);
-    ctx.fillRect(x + 10, y - 5, 6, 3);
+  _drawGunIcon(ctx, x, y, color, gunType) {
+    if (gunType === 'pistol') {
+      ctx.fillStyle = '#777';
+      ctx.fillRect(x - 4, y - 3, 12, 5);
+      ctx.fillStyle = '#555';
+      ctx.fillRect(x + 6, y - 4, 5, 7);
+      ctx.fillStyle = '#666';
+      ctx.fillRect(x - 1, y + 1, 4, 6);
+    } else if (gunType === 'shotgun') {
+      ctx.fillStyle = '#a06030';
+      ctx.fillRect(x - 10, y - 2, 8, 5);
+      ctx.fillStyle = '#555';
+      ctx.fillRect(x - 2, y - 2, 14, 4);
+      ctx.fillStyle = '#444';
+      ctx.fillRect(x + 10, y - 3, 4, 6);
+      ctx.fillStyle = '#906828';
+      ctx.fillRect(x - 4, y - 5, 7, 3);
+    } else if (gunType === 'rifle') {
+      ctx.fillStyle = '#556';
+      ctx.fillRect(x - 12, y - 2, 8, 5);
+      ctx.fillStyle = '#444';
+      ctx.fillRect(x - 4, y - 2, 16, 4);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(x + 10, y - 3, 4, 6);
+      ctx.fillStyle = '#668';
+      ctx.fillRect(x - 1, y - 6, 8, 3);
+    } else {
+      ctx.fillStyle = color;
+      ctx.fillRect(x - 12, y - 3, 24, 6);
+    }
   }
 
   _drawGrenadeIcon(ctx, x, y) {
