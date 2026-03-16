@@ -180,7 +180,6 @@ window._joinTeam = (teamIndex) => {
   readyBtn.textContent = 'Ready Up';
   readyBtn.style.background = '#555';
 };
-});
 
 socket.on('countdown', (data) => {
   countdownEnd = Date.now() + data.seconds * 1000;
