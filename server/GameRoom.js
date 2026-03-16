@@ -8,15 +8,17 @@ import { WEAPONS, AMMO_TYPES } from '../shared/weapons.js';
 const STATES = { WAITING: 'WAITING', COUNTDOWN: 'COUNTDOWN', ACTIVE: 'ACTIVE', ENDED: 'ENDED' };
 
 const LOOT_TABLE = [
-  { type: 'pistol', slot: 'gun', weight: 22 },
-  { type: 'shotgun', slot: 'gun', weight: 14 },
-  { type: 'rifle', slot: 'gun', weight: 12 },
-  { type: 'frag', slot: 'grenade', weight: 6 },
-  { type: 'bandage', slot: 'heal', weight: 8 },
-  { type: 'pistol_ammo', slot: 'ammo', ammoType: 'pistol', weight: 14 },
-  { type: 'shotgun_ammo', slot: 'ammo', ammoType: 'shotgun', weight: 12 },
-  { type: 'rifle_ammo', slot: 'ammo', ammoType: 'rifle', weight: 12 },
+  { type: 'pistol', slot: 'gun', weight: 18 },
+  { type: 'shotgun', slot: 'gun', weight: 12 },
+  { type: 'rifle', slot: 'gun', weight: 10 },
+  { type: 'frag', slot: 'grenade', weight: 12 },
+  { type: 'bandage', slot: 'heal', weight: 14 },
+  { type: 'pistol_ammo', slot: 'ammo', ammoType: 'pistol', weight: 12 },
+  { type: 'shotgun_ammo', slot: 'ammo', ammoType: 'shotgun', weight: 11 },
+  { type: 'rifle_ammo', slot: 'ammo', ammoType: 'rifle', weight: 11 },
 ];
+
+const ITEMS_PER_SLOT = 2; // spawn multiple items per loot slot for higher density
 
 let nextItemId = 0;
 
@@ -195,31 +197,37 @@ export class GameRoom {
 
     for (const building of this.map.buildings) {
       for (const slot of building.lootSlots) {
-        let roll = Math.random() * totalWeight;
-        let picked = LOOT_TABLE[0];
-        for (const entry of LOOT_TABLE) {
-          roll -= entry.weight;
-          if (roll <= 0) { picked = entry; break; }
+        for (let n = 0; n < ITEMS_PER_SLOT; n++) {
+          let roll = Math.random() * totalWeight;
+          let picked = LOOT_TABLE[0];
+          for (const entry of LOOT_TABLE) {
+            roll -= entry.weight;
+            if (roll <= 0) { picked = entry; break; }
+          }
+
+          // Spread items slightly so they don't stack perfectly
+          const offsetX = (n === 0) ? 0 : (Math.random() - 0.5) * 30;
+          const offsetY = (n === 0) ? 0 : (Math.random() - 0.5) * 30;
+
+          const item = {
+            id: `item_${nextItemId++}`,
+            type: picked.type,
+            slot: picked.slot,
+            x: slot.x + offsetX,
+            y: slot.y + offsetY
+          };
+
+          if (picked.slot === 'gun') {
+            item.magAmmo = WEAPONS[picked.type].magSize;
+          } else if (picked.slot === 'grenade' || picked.slot === 'heal') {
+            item.count = 1;
+          } else if (picked.slot === 'ammo') {
+            item.ammoType = picked.ammoType;
+            item.amount = AMMO_TYPES[picked.ammoType].perPickup;
+          }
+
+          this.groundItems.push(item);
         }
-
-        const item = {
-          id: `item_${nextItemId++}`,
-          type: picked.type,
-          slot: picked.slot,
-          x: slot.x,
-          y: slot.y
-        };
-
-        if (picked.slot === 'gun') {
-          item.magAmmo = WEAPONS[picked.type].magSize;
-        } else if (picked.slot === 'grenade' || picked.slot === 'heal') {
-          item.count = 1;
-        } else if (picked.slot === 'ammo') {
-          item.ammoType = picked.ammoType;
-          item.amount = AMMO_TYPES[picked.ammoType].perPickup;
-        }
-
-        this.groundItems.push(item);
       }
     }
   }
