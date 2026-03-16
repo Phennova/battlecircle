@@ -1,0 +1,10 @@
+export const PLAYER_RADIUS = 18;
+export const PLAYER_SPEED = 180;
+export const BULLET_RADIUS = 3;
+export const PICKUP_RANGE = 40;
+export const VISION_RANGE = 600;
+export const MAX_PLAYERS = 8;
+export const MIN_PLAYERS = 2;
+export const PLAYER_HP = 100;
+export const TICK_RATE = 20;
+export const TICK_INTERVAL = 1000 / TICK_RATE;
