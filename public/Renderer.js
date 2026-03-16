@@ -207,10 +207,49 @@ export class Renderer {
     ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
     ctx.scale(_s, _s);
     for (const b of bullets) {
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
-      ctx.fill();
+      if (b.type === 'shrapnel') {
+        // Irregular angular shrapnel piece
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(b.angle + b.x * 0.1); // unique rotation per piece
+        ctx.fillStyle = '#cc8844';
+        ctx.beginPath();
+        // Irregular polygon (3-4 points, jagged)
+        const seed = (b.id ? b.id.charCodeAt(1) || 0 : 0) % 4;
+        if (seed === 0) {
+          ctx.moveTo(-3, -1);
+          ctx.lineTo(1, -3);
+          ctx.lineTo(3, 1);
+          ctx.lineTo(-1, 2);
+        } else if (seed === 1) {
+          ctx.moveTo(-2, -2);
+          ctx.lineTo(3, -1);
+          ctx.lineTo(1, 3);
+          ctx.lineTo(-2, 1);
+        } else if (seed === 2) {
+          ctx.moveTo(0, -3);
+          ctx.lineTo(3, 0);
+          ctx.lineTo(0, 2);
+          ctx.lineTo(-2, -1);
+        } else {
+          ctx.moveTo(-1, -3);
+          ctx.lineTo(2, -2);
+          ctx.lineTo(3, 1);
+          ctx.lineTo(-2, 2);
+        }
+        ctx.closePath();
+        ctx.fill();
+        // Hot orange edge
+        ctx.strokeStyle = '#ff8833';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.restore();
   }

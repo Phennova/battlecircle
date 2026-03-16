@@ -238,7 +238,7 @@ function getInterpolatedBullets(bullets) {
   // Extrapolate bullets forward for smooth rendering, but cap at half a tick
   // to avoid overshooting past where the server will detect a hit
   const elapsed = Math.min((performance.now() - snapshotTime) / 1000, 0.025);
-  const BULLET_SPEEDS = { pistol: 500, shotgun: 450, rifle: 1200, smg: 600, sniper: 1800 };
+  const BULLET_SPEEDS = { pistol: 500, shotgun: 450, rifle: 1200, smg: 600, sniper: 1800, shrapnel: 400 };
   return bullets.map(b => {
     const speed = BULLET_SPEEDS[b.type] || 600;
     return {

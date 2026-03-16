@@ -554,7 +554,7 @@ export class GameRoom {
             this.io.to(this.id).emit('playerKilled', {
               victimId: player.id, killerId: bullet.ownerId,
               victimName: player.name, killerName: attacker ? attacker.name : 'Unknown',
-              cause: bullet.type
+              cause: bullet.type === 'shrapnel' ? 'frag' : bullet.type
             });
             this._checkWin();
           }
@@ -583,43 +583,30 @@ export class GameRoom {
         continue;
       }
 
-      // Frag: explode after fuse
+      // Frag: explode into shrapnel burst
       if (gren.shouldExplode()) {
-        this.players.forEach((player) => {
-          if (!player.alive) return;
-          const dx = player.x - gren.x;
-          const dy = player.y - gren.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist > gren.explosionRadius) return;
+        // Spawn ~25 shrapnel projectiles with random angles and varied speeds
+        const SHRAPNEL_COUNT = 25;
+        const SHRAPNEL_RANGE = 140; // +75% from original 80
+        const SHRAPNEL_DAMAGE = 5;
+        const shrapnelWeapon = {
+          bulletSpeed: 0, // set per piece
+          damage: SHRAPNEL_DAMAGE,
+          range: SHRAPNEL_RANGE,
+          name: 'frag'
+        };
 
-          if (!this._hasLineOfSight(gren.x, gren.y, player.x, player.y)) return;
-
-          const dmg = gren.getDamageAt(dist);
-          player.health -= dmg;
-
-          // Track damage
-          const attacker = this.players.get(gren.ownerId);
-          if (attacker) attacker.damageDealt += dmg;
-
-          const victimSocket = this.io.sockets.sockets.get(player.id);
-          if (victimSocket) {
-            victimSocket.emit('playerHit', { damage: dmg, angle: Math.atan2(dy, dx) });
-          }
-
-          if (player.health <= 0) {
-            player.health = 0;
-            player.alive = false;
-            if (attacker) attacker.kills++;
-            this._recordElimination(player);
-            this._dropItems(player);
-            this.io.to(this.id).emit('playerKilled', {
-              victimId: player.id, killerId: gren.ownerId,
-              victimName: player.name, killerName: attacker ? attacker.name : 'Unknown',
-              cause: 'frag'
-            });
-            this._checkWin();
-          }
-        });
+        for (let s = 0; s < SHRAPNEL_COUNT; s++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 250 + Math.random() * 300; // 250-550 px/s (varied for stagger)
+          const piece = new Bullet(gren.ownerId, gren.x, gren.y, angle, shrapnelWeapon);
+          piece.speed = speed;
+          piece.type = 'shrapnel';
+          // Slight random offset from center so they don't all start at exact same point
+          piece.x += (Math.random() - 0.5) * 6;
+          piece.y += (Math.random() - 0.5) * 6;
+          this.bullets.push(piece);
+        }
         this.grenades.splice(i, 1);
       }
     }
