@@ -561,7 +561,7 @@ export class GameRoom {
         currentRadius: this.zone.currentRadius,
         finalRadius: this.zone.finalRadius
       },
-      gameElapsedMs: this.gameStartTime ? now - this.gameStartTime : 0,
+      gameElapsedMs: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
       alivePlayers: [...this.players.values()].filter(p => p.alive).length
     };
 

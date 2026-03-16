@@ -70,19 +70,17 @@ socket.on('playerCount', (data) => {
 
 socket.on('countdown', (data) => {
   countdownEnd = Date.now() + data.seconds * 1000;
-  lobbyStatus.textContent = '';
+  lobby.style.display = 'none';
+  // Initialize predicted position from spawn
+  if (data.spawnPositions && data.spawnPositions[myId]) {
+    predictedX = data.spawnPositions[myId].x;
+    predictedY = data.spawnPositions[myId].y;
+  }
 });
 
 socket.on('gameStart', () => {
   gameActive = true;
-  lobby.style.display = 'none';
-  if (gameState) {
-    const me = gameState.players.find(p => p.id === myId);
-    if (me) {
-      predictedX = me.x;
-      predictedY = me.y;
-    }
-  }
+  countdownEnd = null;
 });
 
 socket.on('gameState', (state) => {
@@ -180,14 +178,20 @@ function loop(timestamp) {
   // Countdown overlay
   if (countdownEnd && !gameActive) {
     const remaining = Math.ceil((countdownEnd - Date.now()) / 1000);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (remaining > 0) {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 72px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(remaining.toString(), canvas.width / 2, canvas.height / 2);
+    } else {
+      ctx.fillStyle = '#888';
+      ctx.font = '24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Starting...', canvas.width / 2, canvas.height / 2);
     }
     requestAnimationFrame(loop);
     return;
