@@ -424,10 +424,17 @@ function loop(timestamp) {
         dx /= len;
         dy /= len;
       }
+      // Build collision walls including closed doors
+      const collisionWalls = renderer.allWalls;
+      const closedDoorWalls = (gameState.doors || []).filter(d => !d.open);
+      const allCollisionWalls = closedDoorWalls.length > 0
+        ? [...collisionWalls, ...closedDoorWalls]
+        : collisionWalls;
+
       const speedMult = (me.healing || me.reloading) ? 0.3 : 1.0;
       predictedX += dx * PLAYER_SPEED * speedMult * dt;
       predictedY += dy * PLAYER_SPEED * speedMult * dt;
-      const resolved = resolveAgainstWalls(predictedX, predictedY, PLAYER_RADIUS, renderer.allWalls);
+      const resolved = resolveAgainstWalls(predictedX, predictedY, PLAYER_RADIUS, allCollisionWalls);
       predictedX = resolved.x;
       predictedY = resolved.y;
 
@@ -448,7 +455,7 @@ function loop(timestamp) {
         }
         reconX += bdx * PLAYER_SPEED * speedMult * bufferedInput.dt;
         reconY += bdy * PLAYER_SPEED * speedMult * bufferedInput.dt;
-        const r = resolveAgainstWalls(reconX, reconY, PLAYER_RADIUS, renderer.allWalls);
+        const r = resolveAgainstWalls(reconX, reconY, PLAYER_RADIUS, allCollisionWalls);
         reconX = r.x;
         reconY = r.y;
       }
