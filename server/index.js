@@ -3,8 +3,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { readFileSync } from 'fs';
 import { GameRoom } from './GameRoom.js';
+import { generateMap } from './mapGenerator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -13,14 +13,10 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
 
-const mapData = JSON.parse(readFileSync(join(__dirname, 'map.json'), 'utf-8'));
-
 app.use('/shared', express.static(join(__dirname, '..', 'shared')));
 app.use(express.static(join(__dirname, '..', 'public')));
 
-app.get('/api/map', (req, res) => res.json(mapData));
-
-// Room management
+// Room management — each room gets a fresh generated map
 let currentRoom = null;
 const rooms = new Map();
 
@@ -29,6 +25,8 @@ function getOrCreateRoom() {
     return currentRoom;
   }
   const id = `room_${Date.now()}`;
+  const mapData = generateMap();
+  console.log(`Generated new map: ${mapData.buildings.length} buildings, ${mapData.walls.length - 4} barricades`);
   const room = new GameRoom(id, mapData, io);
   rooms.set(id, room);
   currentRoom = room;
