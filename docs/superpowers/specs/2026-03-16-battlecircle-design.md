@@ -370,6 +370,7 @@ Ground loot items are drawn as small colored circles (radius ~10px) with a 1px b
 | Event | Payload | Description |
 |---|---|---|
 | `playerInput` | `{ up, down, left, right, shooting, angle, seq }` | Input state, sent on change. `shooting` boolean drives server-side fire rate. |
+| `requestStart` | `{}` | Lobby: request game start (requires ≥ 2 players) |
 | `throwGrenade` | `{}` | Throw grenade toward current aim angle (read from stored playerInput) |
 | `useHeal` | `{}` | Use heal item |
 | `pickup` | `{}` | Pick up nearest item |
@@ -379,7 +380,8 @@ Ground loot items are drawn as small colored circles (radius ~10px) with a 1px b
 | Event | Payload | Description |
 |---|---|---|
 | `roomJoined` | `{ roomId, playerId, map }` | After join — includes full map data |
-| `gameStart` | `{ spawnPositions }` | Countdown done, game starting |
+| `countdown` | `{ spawnPositions, seconds }` | Countdown started — client shows 3s overlay and spawn positions |
+| `gameStart` | `{}` | Countdown done — game is now ACTIVE, input enabled |
 | `gameState` | Full state snapshot | 20×/sec tick broadcast |
 | `playerKilled` | `{ victimId, killerId }` | Kill feed entry |
 | `gameOver` | `{ winnerId }` | Match ended |
