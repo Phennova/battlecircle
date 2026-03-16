@@ -30,7 +30,7 @@ export const WEAPONS = {
     range: 700,
     magSize: 10,
     reloadTime: 1500,
-    bulletSpeed: 800,
+    bulletSpeed: 1200,
     pellets: 1,
     spread: 0,
     color: '#4a9eff'
@@ -54,7 +54,7 @@ export const WEAPONS = {
     range: 1200,
     magSize: 5,
     reloadTime: 2000,
-    bulletSpeed: 1200,
+    bulletSpeed: 1800,
     pellets: 1,
     spread: 0,
     color: '#8b4513'

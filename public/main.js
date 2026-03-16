@@ -49,6 +49,7 @@ const effects = {
   explosions: [],
   hitFlash: null
 };
+let lastSniperFireTime = 0;
 const killFeed = [];
 const tracerTrails = [];
 
@@ -183,6 +184,20 @@ function sendInput(inp) {
   }
 }
 
+// Bullet interpolation — extrapolate bullet positions based on their angle and speed
+function getInterpolatedBullets(bullets) {
+  const elapsed = (performance.now() - snapshotTime) / 1000;
+  const BULLET_SPEEDS = { pistol: 500, shotgun: 450, rifle: 1200, smg: 600, sniper: 1800 };
+  return bullets.map(b => {
+    const speed = BULLET_SPEEDS[b.type] || 600;
+    return {
+      ...b,
+      x: b.x + Math.cos(b.angle) * speed * elapsed,
+      y: b.y + Math.sin(b.angle) * speed * elapsed
+    };
+  });
+}
+
 // Remote player interpolation
 function getInterpolatedPlayer(playerId) {
   const curr = gameState.players.find(p => p.id === playerId);
@@ -290,6 +305,7 @@ function loop(timestamp) {
       const sniperFire = inputHandler.consumeSniperFire();
       if (sniperFire && !me.healing) {
         socket.emit('sniperFire', { angle: sniperFire.angle });
+        lastSniperFireTime = performance.now();
       }
 
       // Store input for prediction
@@ -375,8 +391,20 @@ function loop(timestamp) {
       const visibility = shadowCaster.computeVisibility(viewX, viewY, effectiveVisionRange);
       shadowCaster.removeSmokeBlockers();
 
-      // Camera scale — zoom out when scoping to show full vision range
-      const cameraScale = isScoping ? 600 / currentVisionRange : 1;
+      // Camera scale — zoom out when scoping, linger after firing
+      let cameraScale = 1;
+      if (isScoping) {
+        cameraScale = 600 / currentVisionRange;
+      } else if (isSniper && lastSniperFireTime > 0) {
+        const sinceShot = performance.now() - lastSniperFireTime;
+        const lingerDuration = 1000;
+        if (sinceShot < lingerDuration) {
+          // Hold zoomed out then ease back to 1
+          const t = sinceShot / lingerDuration;
+          const eased = t * t; // ease-in: stays zoomed longer, snaps back at end
+          cameraScale = 0.6 + 0.4 * eased; // 0.6 → 1.0
+        }
+      }
 
       // Render
       renderer.draw(viewX, viewY, visibility, cameraScale);
@@ -387,8 +415,9 @@ function loop(timestamp) {
       );
       renderer.drawGroundItems(visibleItems, viewX, viewY, timestamp);
 
-      // Bullets
-      const visibleBullets = gameState.bullets.filter(b =>
+      // Bullets (interpolated for smooth motion)
+      const interpBullets = getInterpolatedBullets(gameState.bullets);
+      const visibleBullets = interpBullets.filter(b =>
         shadowCaster.isVisible(b.x, b.y, visibility)
       );
       renderer.drawBullets(visibleBullets, viewX, viewY);
@@ -470,7 +499,8 @@ function loop(timestamp) {
         const visibleItems = gameState.groundItems.filter(item => shadowCaster.isVisible(item.x, item.y, visibility));
         renderer.drawGroundItems(visibleItems, viewX, viewY, timestamp);
 
-        const visibleBullets = gameState.bullets.filter(b => shadowCaster.isVisible(b.x, b.y, visibility));
+        const interpBullets = getInterpolatedBullets(gameState.bullets);
+        const visibleBullets = interpBullets.filter(b => shadowCaster.isVisible(b.x, b.y, visibility));
         renderer.drawBullets(visibleBullets, viewX, viewY);
         renderer.drawTracers(visibleBullets, tracerTrails, viewX, viewY, performance.now());
 
