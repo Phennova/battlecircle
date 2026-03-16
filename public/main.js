@@ -63,10 +63,15 @@ const COLORS = ['#4a9eff', '#ff6b6b', '#50c878', '#ffc832', '#ff8c42', '#c77dff'
 // Lobby UI
 const lobby = document.getElementById('lobby');
 const lobbyStatus = lobby.querySelector('.status');
-const startBtn = document.getElementById('startBtn');
+const readyBtn = document.getElementById('readyBtn');
+const playerList = document.getElementById('playerList');
+let isReady = false;
 
-startBtn.addEventListener('click', () => {
-  socket.emit('requestStart');
+readyBtn.addEventListener('click', () => {
+  isReady = !isReady;
+  socket.emit('toggleReady');
+  readyBtn.textContent = isReady ? 'Ready!' : 'Ready Up';
+  readyBtn.style.background = isReady ? '#50c878' : '#555';
 });
 
 socket.on('roomJoined', (data) => {
@@ -75,11 +80,18 @@ socket.on('roomJoined', (data) => {
   renderer.setMap(map);
   shadowCaster.setWalls(renderer.allWalls);
   lobbyStatus.textContent = 'Waiting for players...';
+  readyBtn.disabled = false;
 });
 
-socket.on('playerCount', (data) => {
+socket.on('lobbyUpdate', (data) => {
   lobbyStatus.textContent = `${data.count} / ${data.max} players`;
-  startBtn.disabled = data.count < 2;
+  // Render player list with ready status
+  playerList.innerHTML = data.players.map(p =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin:4px 0;background:rgba(255,255,255,0.05);border-radius:6px">
+      <span style="color:#ccc">${p.name}</span>
+      <span style="color:${p.ready ? '#50c878' : '#888'};font-size:13px">${p.ready ? 'Ready' : 'Not Ready'}</span>
+    </div>`
+  ).join('');
 });
 
 socket.on('countdown', (data) => {

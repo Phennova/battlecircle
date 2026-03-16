@@ -42,7 +42,6 @@ export class GameRoom {
     this.gameStartTime = null;
     this.tickInterval = null;
     this.lastTickTime = null;
-    this.autoStartTimer = null;
     this.usedNames = new Set();
     this.finishedPlayers = [];
 
@@ -87,10 +86,12 @@ export class GameRoom {
       }
     });
 
-    socket.on('requestStart', () => {
-      if (this.state === STATES.WAITING && this.players.size >= 2) {
-        this._startCountdown();
-      }
+    socket.on('toggleReady', () => {
+      const p = this.players.get(socket.id);
+      if (!p || this.state !== STATES.WAITING) return;
+      p.ready = !p.ready;
+      this._broadcastLobby();
+      this._checkAllReady();
     });
 
     socket.on('pickup', () => {
@@ -151,15 +152,7 @@ export class GameRoom {
       this._removePlayer(socket.id);
     });
 
-    if (this.players.size >= 2 && !this.autoStartTimer && this.state === STATES.WAITING) {
-      this.autoStartTimer = setTimeout(() => {
-        if (this.state === STATES.WAITING && this.players.size >= 2) {
-          this._startCountdown();
-        }
-      }, 30000);
-    }
-
-    this.io.to(this.id).emit('playerCount', { count: this.players.size, max: 8 });
+    this._broadcastLobby();
   }
 
   _removePlayer(socketId) {
@@ -186,12 +179,9 @@ export class GameRoom {
     if (player) this.usedNames.delete(player.name);
     this.players.delete(socketId);
 
-    if (this.players.size < 2 && this.autoStartTimer) {
-      clearTimeout(this.autoStartTimer);
-      this.autoStartTimer = null;
+    if (this.state === STATES.WAITING) {
+      this._broadcastLobby();
     }
-
-    this.io.to(this.id).emit('playerCount', { count: this.players.size, max: 8 });
   }
 
   _pickSpawn() {
@@ -215,11 +205,27 @@ export class GameRoom {
     return best;
   }
 
-  _startCountdown() {
-    if (this.autoStartTimer) {
-      clearTimeout(this.autoStartTimer);
-      this.autoStartTimer = null;
+  _broadcastLobby() {
+    const playerList = [];
+    this.players.forEach((p) => {
+      playerList.push({ name: p.name, ready: p.ready || false });
+    });
+    this.io.to(this.id).emit('lobbyUpdate', {
+      players: playerList,
+      count: this.players.size,
+      max: 8
+    });
+  }
+
+  _checkAllReady() {
+    if (this.players.size < 2) return;
+    const allReady = [...this.players.values()].every(p => p.ready);
+    if (allReady) {
+      this._startCountdown();
     }
+  }
+
+  _startCountdown() {
     this.state = STATES.COUNTDOWN;
     this._spawnLoot();
 

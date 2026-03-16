@@ -37,6 +37,7 @@ export class Player {
     this.reloadingUntil = 0;
 
     // Stats
+    this.ready = false;
     this.kills = 0;
     this.damageDealt = 0;
     this.placement = 0;
