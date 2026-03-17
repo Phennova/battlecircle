@@ -42,6 +42,7 @@ let gameOverData = null;
 // Client prediction
 const inputBuffer = [];
 let predictedX = 0, predictedY = 0;
+let cameraX = 0, cameraY = 0;
 let seq = 0;
 let lastInputJSON = '';
 
@@ -470,7 +471,7 @@ function getInterpolatedBullets(bullets) {
   });
 }
 
-// Remote player interpolation
+// Remote player interpolation with extrapolation
 function getInterpolatedPlayer(playerId) {
   const curr = gameState.players.find(p => p.id === playerId);
   if (!prevGameState || !curr) return curr;
@@ -479,14 +480,28 @@ function getInterpolatedPlayer(playerId) {
 
   const elapsed = performance.now() - snapshotTime;
   const interval = snapshotTime - prevSnapshotTime || 50;
-  const t = Math.min(1, elapsed / interval);
+  const t = elapsed / interval;
 
-  return {
-    ...curr,
-    x: prev.x + (curr.x - prev.x) * t,
-    y: prev.y + (curr.y - prev.y) * t,
-    angle: curr.angle
-  };
+  if (t <= 1) {
+    // Normal interpolation between prev and current
+    return {
+      ...curr,
+      x: prev.x + (curr.x - prev.x) * t,
+      y: prev.y + (curr.y - prev.y) * t,
+      angle: curr.angle
+    };
+  } else {
+    // Extrapolate past current snapshot using velocity
+    const vx = curr.x - prev.x;
+    const vy = curr.y - prev.y;
+    const extraT = Math.min(t - 1, 1); // cap extrapolation at 1 interval
+    return {
+      ...curr,
+      x: curr.x + vx * extraT,
+      y: curr.y + vy * extraT,
+      angle: curr.angle
+    };
+  }
 }
 
 // Spectator: Play Again click area
@@ -548,7 +563,7 @@ function loop(timestamp) {
 
   if ((gameActive || spectating) && gameState && map) {
     const me = gameState.players.find(p => p.id === myId);
-    let viewX, viewY;
+    let viewX = cameraX, viewY = cameraY;
     let isScoping = false;
 
     // Detect respawn in TDM
@@ -713,16 +728,32 @@ function loop(timestamp) {
       const errX = reconX - predictedX;
       const errY = reconY - predictedY;
       const err = Math.sqrt(errX * errX + errY * errY);
-      if (err > 2) {
-        predictedX += errX * 0.3;
-        predictedY += errY * 0.3;
-      } else {
+      if (err > 100) {
+        // Teleport — too far off (respawn, lag spike)
         predictedX = reconX;
         predictedY = reconY;
+      } else if (err > 1) {
+        // Smooth correction — blend toward server position
+        const blend = Math.min(0.2, err * 0.01);
+        predictedX += errX * blend;
+        predictedY += errY * blend;
       }
 
-      viewX = predictedX;
-      viewY = predictedY;
+      // Cap input buffer to prevent growing unbounded
+      if (inputBuffer.length > 60) {
+        inputBuffer.splice(0, inputBuffer.length - 60);
+      }
+
+      // Smooth camera
+      if (cameraX === 0 && cameraY === 0) {
+        cameraX = predictedX;
+        cameraY = predictedY;
+      } else {
+        cameraX += (predictedX - cameraX) * 0.35;
+        cameraY += (predictedY - cameraY) * 0.35;
+      }
+      viewX = cameraX;
+      viewY = cameraY;
 
       // Sniper scope vision
       let currentVisionRange = 600;
