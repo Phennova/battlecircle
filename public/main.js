@@ -843,6 +843,17 @@ function loop(timestamp) {
           }
         }
       }
+
+      // Healing plus symbols and reload bullet icons on local player
+      renderer.drawPlayerStatusEffects(ctx, [{ ...me, x: viewX, y: viewY }], timestamp);
+
+      ctx.restore();
+
+      // Status effects on other players (in world space)
+      ctx.save();
+      ctx.translate(canvas.width / 2 - viewX * cameraScale + (renderer._shakeOffsetX||0), canvas.height / 2 - viewY * cameraScale + (renderer._shakeOffsetY||0));
+      ctx.scale(cameraScale, cameraScale);
+      renderer.drawPlayerStatusEffects(ctx, gameState.players.filter(p => p.id !== myId && p.alive), timestamp);
       ctx.restore();
 
       // Doors
@@ -863,6 +874,7 @@ function loop(timestamp) {
 
       // HUD
       hud.draw(ctx, canvas.width, canvas.height, me, gameState);
+      renderer.drawActionProgressBar(ctx, canvas.width, canvas.height, me, gameState);
       if (me.gun && onCooldown) {
         hud.drawShotCooldown(ctx, canvas.width, canvas.height, cooldownPct);
       }

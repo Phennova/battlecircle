@@ -1410,6 +1410,124 @@ export class Renderer {
     ctx.restore();
   }
 
+  drawPlayerStatusEffects(ctx, players, timestamp) {
+    // Draw healing plus symbols and reload bullet icons above players
+    for (const p of players) {
+      if (!p.alive) continue;
+
+      if (p.healing) {
+        // Floating plus symbols
+        for (let i = 0; i < 3; i++) {
+          const phase = timestamp / 600 + i * 2.1;
+          const floatY = -30 - (phase % 1) * 25;
+          const alpha = 1 - (phase % 1);
+          const offsetX = Math.sin(phase * 3 + i) * 10;
+          ctx.globalAlpha = alpha * 0.7;
+          ctx.fillStyle = '#50c878';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('+', p.x + offsetX, p.y + floatY);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      if (p.reloading) {
+        // Small bullet icons circling
+        for (let i = 0; i < 4; i++) {
+          const angle = timestamp / 400 + (i * Math.PI / 2);
+          const rx = p.x + Math.cos(angle) * 26;
+          const ry = p.y + Math.sin(angle) * 26;
+          ctx.globalAlpha = 0.6;
+          ctx.fillStyle = '#d4a843';
+          ctx.fillRect(rx - 1, ry - 3, 2, 5);
+          ctx.fillStyle = '#c87533';
+          ctx.beginPath();
+          ctx.moveTo(rx - 1, ry - 3);
+          ctx.lineTo(rx, ry - 5);
+          ctx.lineTo(rx + 1, ry - 3);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  drawActionProgressBar(ctx, canvasW, canvasH, me, gameState) {
+    // Show progress bar for healing or reloading
+    if (!me || (!me.healing && !me.reloading)) return;
+
+    const barW = 120;
+    const barH = 6;
+    const cx = canvasW / 2;
+    const cy = canvasH / 2 + 35;
+
+    // Estimate progress from game state timing
+    // We don't have exact start time, so use a pulse animation as fallback
+    let label, color, progress;
+
+    if (me.healing) {
+      const healItem = me.heal;
+      const duration = healItem && healItem.type === 'medkit' ? 4000 : 1500;
+      // Animate progress bar
+      if (!this._healStart || !this._wasHealing) this._healStart = performance.now();
+      this._wasHealing = true;
+      progress = Math.min(1, (performance.now() - this._healStart) / duration);
+      label = 'HEALING';
+      color = '#50c878';
+    } else {
+      this._wasHealing = false;
+      this._healStart = null;
+    }
+
+    if (me.reloading) {
+      const gun = me.gun;
+      if (gun) {
+        const weapon = WEAPONS[gun.type];
+        const duration = weapon ? weapon.reloadTime : 1500;
+        if (!this._reloadStart || !this._wasReloading) this._reloadStart = performance.now();
+        this._wasReloading = true;
+        progress = Math.min(1, (performance.now() - this._reloadStart) / duration);
+        label = 'RELOADING';
+        color = '#ffc832';
+      }
+    } else {
+      this._wasReloading = false;
+      this._reloadStart = null;
+    }
+
+    if (progress === undefined) return;
+
+    // Background bar
+    ctx.fillStyle = 'rgba(12, 16, 28, 0.7)';
+    ctx.fillRect(cx - barW / 2 - 4, cy - 12, barW + 8, barH + 18);
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - barW / 2 - 4, cy - 12, 2, barH + 18);
+
+    // Label
+    ctx.font = "700 9px 'Orbitron', sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = color;
+    ctx.fillText(label, cx, cy - 2);
+
+    // Bar track
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillRect(cx - barW / 2, cy + 2, barW, barH);
+
+    // Bar fill
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - barW / 2, cy + 2, barW * progress, barH);
+
+    // Glow at fill end
+    if (progress > 0 && progress < 1) {
+      ctx.globalAlpha = 0.4;
+      ctx.fillRect(cx - barW / 2 + barW * progress - 2, cy, 4, barH + 4);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   drawScopeOverlay(ctx, canvasW, canvasH) {
     ctx.strokeStyle = 'rgba(255, 200, 100, 0.3)';
     ctx.lineWidth = 1;

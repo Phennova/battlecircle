@@ -904,6 +904,14 @@ export class GameRoom {
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > this.zone.currentRadius) {
           player.health -= this.zone.damagePerSecond * dt;
+          // Emit hit flash for zone damage (throttled to ~2/sec)
+          if (!player._lastZoneHitEmit || now - player._lastZoneHitEmit > 500) {
+            player._lastZoneHitEmit = now;
+            const victimSocket = this.io.sockets.sockets.get(player.id);
+            if (victimSocket) {
+              victimSocket.emit('playerHit', { damage: this.zone.damagePerSecond * 0.5, angle: Math.atan2(dy, dx) });
+            }
+          }
           if (player.health <= 0) {
             this._handleKill(player, null, 'zone');
           }
