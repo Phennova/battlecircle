@@ -438,19 +438,34 @@ export class BotAI {
       }
     }
 
-    // Stuck detection
+    // Stuck detection — fast response
     const movedDist = Math.sqrt((bot.x - this.lastPos.x) ** 2 + (bot.y - this.lastPos.y) ** 2);
-    if (movedDist < 2) {
+    if (movedDist < 1) {
       this.stuckTimer += dt;
-      if (this.stuckTimer > 2) {
-        // Stuck recovery — move in random perpendicular direction
-        const randAngle = bot.angle + (Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2);
-        bot.input.right = Math.cos(randAngle) > 0.3;
-        bot.input.left = Math.cos(randAngle) < -0.3;
-        bot.input.down = Math.sin(randAngle) > 0.3;
-        bot.input.up = Math.sin(randAngle) < -0.3;
+      if (this.stuckTimer > 0.5) {
+        // Stuck recovery — try perpendicular directions
         this.stuckTimer = 0;
         this.currentPath = []; // force path recalc
+        this.pathRecalcTimer = 0; // recalc immediately
+
+        // Try 4 perpendicular escape directions
+        const escapeAngle = Math.atan2(goalY - bot.y, goalX - bot.x);
+        const tryAngles = [
+          escapeAngle + Math.PI / 2,
+          escapeAngle - Math.PI / 2,
+          escapeAngle + Math.PI, // backwards
+          escapeAngle + Math.PI / 4
+        ];
+        const chosen = tryAngles[Math.floor(Math.random() * tryAngles.length)];
+        bot.input.right = Math.cos(chosen) > 0.3;
+        bot.input.left = Math.cos(chosen) < -0.3;
+        bot.input.down = Math.sin(chosen) > 0.3;
+        bot.input.up = Math.sin(chosen) < -0.3;
+
+        // Also change patrol/hunt goal so we don't keep trying the same blocked spot
+        bot._lootPatrolGoal = null;
+        bot._huntGoal = null;
+        bot._patrolGoal = null;
       }
     } else {
       this.stuckTimer = 0;
