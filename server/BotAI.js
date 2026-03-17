@@ -71,6 +71,7 @@ export class BotAI {
     const ctx = this._buildContext();
 
     // Score all behaviors and pick the best
+    // Add hysteresis: current behavior gets a small bonus to prevent oscillation
     let bestScore = -1;
     let bestAction = null;
     const allScores = [];
@@ -78,11 +79,15 @@ export class BotAI {
     for (const behavior of this.behaviors) {
       const result = behavior(bot, ctx);
       if (result.score > 0) {
+        // Hysteresis: if this behavior is currently active, give it +5 bonus
+        // to prevent flip-flopping between equal-score behaviors
+        const bonus = (this.currentBehavior === result.type) ? 5 : 0;
+        const effectiveScore = result.score + bonus;
         allScores.push({ name: behavior.name, score: result.score, type: result.type });
-      }
-      if (result.score > bestScore) {
-        bestScore = result.score;
-        bestAction = result;
+        if (effectiveScore > bestScore) {
+          bestScore = effectiveScore;
+          bestAction = result;
+        }
       }
     }
 
@@ -352,6 +357,17 @@ export class BotAI {
       this.pathGoalX = goalX;
       this.pathGoalY = goalY;
       this.pathRecalcTimer = 0.5;
+
+      // Debug: log pathfinding failures
+      if (this.currentPath.length === 0 && this._lastLogTime && Date.now() - this._lastPathLog > 5000) {
+        this._lastPathLog = Date.now();
+        const startCell = navGrid.worldToCell(bot.x, bot.y);
+        const endCell = navGrid.worldToCell(goalX, goalY);
+        const startWalk = navGrid.isWalkable(startCell.c, startCell.r);
+        const endWalk = navGrid.isWalkable(endCell.c, endCell.r);
+        console.log(`[PATH FAIL ${bot.name}] from (${Math.round(bot.x)},${Math.round(bot.y)}) cell(${startCell.c},${startCell.r}) walkable:${startWalk} -> (${Math.round(goalX)},${Math.round(goalY)}) cell(${endCell.c},${endCell.r}) walkable:${endWalk}`);
+      }
+      if (!this._lastPathLog) this._lastPathLog = Date.now();
     }
 
     // Follow the path — if empty, move directly toward goal (fallback)
@@ -392,14 +408,15 @@ export class BotAI {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist > 5) {
-      // Set directional input
-      const moveAngle = Math.atan2(dy, dx);
-      const threshold = Math.PI / 4;
+      // Normalize direction and set input based on dominant axis
+      const ndx = dx / dist;
+      const ndy = dy / dist;
 
-      if (moveAngle > -threshold * 3 && moveAngle < threshold * 3) bot.input.right = true;
-      if (moveAngle > threshold && moveAngle < Math.PI - threshold) bot.input.down = true;
-      if (moveAngle > threshold * 3 || moveAngle < -threshold * 3) bot.input.left = true;
-      if (moveAngle < -threshold && moveAngle > -Math.PI + threshold) bot.input.up = true;
+      // Use a dead zone of 0.3 to prevent jittery diagonal switching
+      if (ndx > 0.3) bot.input.right = true;
+      if (ndx < -0.3) bot.input.left = true;
+      if (ndy > 0.3) bot.input.down = true;
+      if (ndy < -0.3) bot.input.up = true;
 
       // Face movement direction when not in combat
       if (!this.targetId && this.currentBehavior !== 'combat') {
