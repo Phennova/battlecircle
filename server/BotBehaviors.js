@@ -242,11 +242,26 @@ function lootHeal(bot, ctx) {
 function combatEngage(bot, ctx) {
   if (!ctx.nearestEnemy || !ctx.canSeeEnemy) return { score: 0 };
 
+  // If unarmed and enemy is visible, FLEE instead of standing still
+  if (!bot.gun) {
+    const dx = bot.x - ctx.nearestEnemy.x;
+    const dy = bot.y - ctx.nearestEnemy.y;
+    const fleeAngle = Math.atan2(dy, dx);
+    return {
+      score: 97, // higher than lootWeaponUnarmed (95) — survival first
+      type: 'move',
+      goalX: bot.x + Math.cos(fleeAngle) * 300,
+      goalY: bot.y + Math.sin(fleeAngle) * 300
+    };
+  }
+
   let score = 80;
-  if (bot.health > 70 && bot.gun && bot.gun.magAmmo > 3) score += 15;
+  if (bot.health > 70 && bot.gun.magAmmo > 3) score += 15;
   if (bot.health < 25) score -= 30;
-  if (bot.gun && bot.gun.magAmmo < 3) score -= 20;
-  if (!bot.gun) score -= 40;
+  if (bot.gun.magAmmo < 3) score -= 20;
+
+  // Close range enemy boost — can't ignore someone right next to you
+  if (ctx.nearestEnemyDist < 150) score += 10;
 
   return {
     score: Math.max(0, score),

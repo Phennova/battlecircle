@@ -494,10 +494,12 @@ export class BotAI {
         this.currentPath = [];
         this.pathRecalcTimer = 0;
 
-        // Clear all goals
+        // Clear all goals including committed goal
         bot._lootPatrolGoal = null;
         bot._huntGoal = null;
         bot._patrolGoal = null;
+        this._committedGoal = null;
+        this.currentBehavior = null;
 
         if (this.stuckCount > 4) {
           // Head toward map center
