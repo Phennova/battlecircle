@@ -293,6 +293,13 @@ socket.on('gameState', (state) => {
   snapshotTime = performance.now();
 });
 
+// Sniper hitscan lines
+const sniperLines = []; // { x, y, endX, endY, time }
+
+socket.on('sniperLine', (data) => {
+  sniperLines.push({ ...data, time: performance.now() });
+});
+
 socket.on('playerHit', (data) => {
   effects.hitFlash = { angle: data.angle, startTime: performance.now(), duration: 300 };
   renderer.triggerScreenShake(data.damage * 0.3, 200);
@@ -865,6 +872,7 @@ function loop(timestamp) {
       renderer.drawZone(gameState.zone, viewX, viewY, timestamp);
       renderer.drawSmokeClouds(activeSmokes, viewX, viewY, timestamp);
       renderer.drawExplosions(effects.explosions, viewX, viewY, performance.now());
+      renderer.drawSniperLines(sniperLines, viewX, viewY, performance.now());
       renderer.drawHitFlash(canvas.width, canvas.height, effects.hitFlash, performance.now());
       if (effects.hitFlash && performance.now() - effects.hitFlash.startTime > effects.hitFlash.duration) {
         effects.hitFlash = null;
@@ -958,6 +966,7 @@ function loop(timestamp) {
         renderer.drawZone(gameState.zone, viewX, viewY, timestamp);
         renderer.drawSmokeClouds(activeSmokes, viewX, viewY, timestamp);
         renderer.drawExplosions(effects.explosions, viewX, viewY, performance.now());
+        renderer.drawSniperLines(sniperLines, viewX, viewY, performance.now());
 
         hud.drawSpectatorHUD(ctx, canvas.width, canvas.height,
           spectTarget.name || '?', gameState.alivePlayers, gameState.players.length);

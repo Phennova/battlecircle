@@ -1530,6 +1530,54 @@ export class Renderer {
     }
   }
 
+  drawSniperLines(lines, cameraX, cameraY, now) {
+    const { ctx, canvas } = this;
+    const _s = this._currentScale || 1;
+
+    ctx.save();
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
+    ctx.scale(_s, _s);
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      const age = now - line.time;
+      const duration = 300;
+      if (age > duration) { lines.splice(i, 1); continue; }
+
+      const t = age / duration;
+
+      // Bright core line that fades
+      ctx.globalAlpha = (1 - t) * 0.9;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3 * (1 - t * 0.5);
+      ctx.beginPath();
+      ctx.moveTo(line.x, line.y);
+      ctx.lineTo(line.endX, line.endY);
+      ctx.stroke();
+
+      // Orange/red glow around it
+      ctx.globalAlpha = (1 - t) * 0.4;
+      ctx.strokeStyle = '#ff6b4a';
+      ctx.lineWidth = 8 * (1 - t * 0.3);
+      ctx.beginPath();
+      ctx.moveTo(line.x, line.y);
+      ctx.lineTo(line.endX, line.endY);
+      ctx.stroke();
+
+      // Flash at origin
+      if (age < 80) {
+        ctx.globalAlpha = (1 - age / 80) * 0.6;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(line.x, line.y, 15, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
   drawScopeOverlay(ctx, canvasW, canvasH) {
     ctx.strokeStyle = 'rgba(255, 200, 100, 0.3)';
     ctx.lineWidth = 1;

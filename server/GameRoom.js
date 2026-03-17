@@ -237,19 +237,40 @@ export class GameRoom {
       p.lastShotTime = now;
       p.gun.magAmmo--;
 
-      // Player velocity for bullet inheritance
-      const sinp = p.input;
-      let sdx = (sinp.right ? 1 : 0) - (sinp.left ? 1 : 0);
-      let sdy = (sinp.down ? 1 : 0) - (sinp.up ? 1 : 0);
-      if (sdx !== 0 && sdy !== 0) { const l = Math.sqrt(sdx*sdx+sdy*sdy); sdx/=l; sdy/=l; }
-      const sniperSpeedMult = sinp.scoping ? 0.4 : 1.0;
-      const svx = sdx * p.speed * sniperSpeedMult;
-      const svy = sdy * p.speed * sniperSpeedMult;
+      // Hitscan: instant line from player position in aim direction
+      // Hits ANY player along the line, ignores walls, infinite range
+      const angle = data.angle || p.angle;
+      const lineLen = 3000; // effectively infinite on our map
+      const endX = p.x + Math.cos(angle) * lineLen;
+      const endY = p.y + Math.sin(angle) * lineLen;
 
-      const bullet = new Bullet(p.id, p.x, p.y, data.angle || p.angle, weapon, svx, svy);
-      bullet.originX = p.x;
-      bullet.originY = p.y;
-      this.bullets.push(bullet);
+      // Check all players along the line
+      this.players.forEach((target) => {
+        if (!target.alive || target.id === p.id) return;
+        // Block friendly fire in team modes
+        if (this.mode.teams && p.team === target.team) return;
+
+        // Distance from point to line segment
+        const dist = this._pointToLineDist(target.x, target.y, p.x, p.y, endX, endY);
+        if (dist < PLAYER_RADIUS) {
+          target.health -= weapon.damage;
+          p.damageDealt += weapon.damage;
+
+          const victimSocket = this.io.sockets.sockets.get(target.id);
+          if (victimSocket) {
+            victimSocket.emit('playerHit', { damage: weapon.damage, angle });
+          }
+
+          if (target.health <= 0) {
+            this._handleKill(target, p.id, 'sniper');
+          }
+        }
+      });
+
+      // Broadcast the hitscan line for visual rendering
+      this.io.to(this.id).emit('sniperLine', {
+        x: p.x, y: p.y, angle, endX, endY, shooterId: p.id
+      });
     });
 
     socket.on('selectClass', (classId) => {
@@ -1258,6 +1279,18 @@ export class GameRoom {
         standings
       });
     }
+  }
+
+  _pointToLineDist(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+    let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+    return Math.sqrt((px - projX) ** 2 + (py - projY) ** 2);
   }
 
   _hasLineOfSight(x1, y1, x2, y2) {
