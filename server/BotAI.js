@@ -348,6 +348,19 @@ export class BotAI {
     const bot = this.bot;
     const navGrid = this.room.navGrid;
 
+    // If bot is on a blocked cell, override goal to nearest walkable cell
+    if (navGrid) {
+      const myCell = navGrid.worldToCell(bot.x, bot.y);
+      if (!navGrid.isWalkable(myCell.c, myCell.r)) {
+        const nearest = navGrid._findNearestWalkable(myCell.c, myCell.r);
+        if (nearest) {
+          const wp = navGrid.cellToWorld(nearest.c, nearest.r);
+          goalX = wp.x;
+          goalY = wp.y;
+        }
+      }
+    }
+
     // Recalculate path periodically or when goal changes significantly
     this.pathRecalcTimer -= dt;
     const goalChanged = Math.abs(goalX - this.pathGoalX) > 60 || Math.abs(goalY - this.pathGoalY) > 60;
@@ -513,7 +526,7 @@ export class BotAI {
     const dx = x2 - x1;
     const dy = y2 - y1;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const steps = Math.ceil(dist / 15);
+    const steps = Math.ceil(dist / 5); // 5px steps to catch thin walls
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
       const px = x1 + dx * t;

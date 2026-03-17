@@ -174,7 +174,7 @@ export class NavGrid {
     const diagCost = 1.414;
 
     let iterations = 0;
-    const maxIterations = 2000;
+    const maxIterations = 5000;
 
     while (openSet.size > 0 && iterations < maxIterations) {
       iterations++;
