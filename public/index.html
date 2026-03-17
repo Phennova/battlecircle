@@ -4,144 +4,399 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BattleCircle</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; font-family: sans-serif; }
-    canvas#game {
-      display: block;
-      width: 100vw;
-      height: 100vh;
+    :root {
+      --bg-deep: #06080f;
+      --bg-panel: rgba(12, 16, 28, 0.85);
+      --accent: #4a9eff;
+      --accent-glow: rgba(74, 158, 255, 0.15);
+      --accent-hot: #ff6b4a;
+      --text-primary: #e0e6f0;
+      --text-dim: #5a6480;
+      --text-muted: #333a50;
+      --border: rgba(74, 158, 255, 0.12);
+      --border-hover: rgba(74, 158, 255, 0.4);
+      --font-display: 'Orbitron', sans-serif;
+      --font-body: 'Rajdhani', sans-serif;
     }
 
-    /* Mode select screen */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg-deep); overflow: hidden; font-family: var(--font-body); color: var(--text-primary); }
+
+    canvas#game { display: block; width: 100vw; height: 100vh; }
+
+    /* ═══ MODE SELECT ═══ */
     #modeSelect {
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: #0a0a1a;
-      color: #fff;
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: var(--bg-deep);
       z-index: 20;
+      overflow: hidden;
     }
-    #modeSelect h1 { font-size: 52px; margin-bottom: 8px; letter-spacing: 2px; }
-    #modeSelect .subtitle { color: #666; margin-bottom: 32px; font-size: 14px; }
-    .mode-list { display: flex; flex-direction: column; gap: 10px; min-width: 340px; }
+
+    /* Animated grid background */
+    #modeSelect::before {
+      content: '';
+      position: absolute; inset: -50%;
+      width: 200%; height: 200%;
+      background-image:
+        linear-gradient(rgba(74,158,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(74,158,255,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridDrift 20s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes gridDrift {
+      0% { transform: translate(0, 0) rotate(0deg); }
+      100% { transform: translate(60px, 60px) rotate(0.5deg); }
+    }
+
+    /* Radial glow */
+    #modeSelect::after {
+      content: '';
+      position: absolute;
+      width: 800px; height: 800px;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(circle, rgba(74,158,255,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .menu-content {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column;
+      align-items: center;
+    }
+
+    .title-group { text-align: center; margin-bottom: 48px; }
+
+    .title-group h1 {
+      font-family: var(--font-display);
+      font-size: 56px;
+      font-weight: 900;
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #fff 0%, var(--accent) 50%, #fff 100%);
+      background-size: 200% 200%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: titleShimmer 4s ease-in-out infinite;
+      line-height: 1.1;
+    }
+    @keyframes titleShimmer {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    .title-group .tagline {
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 300;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-top: 12px;
+    }
+
+    /* Decorative line */
+    .divider {
+      width: 200px; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      margin: 0 auto 40px;
+      position: relative;
+    }
+    .divider::after {
+      content: '';
+      position: absolute;
+      width: 8px; height: 8px;
+      background: var(--accent);
+      top: -3.5px; left: 50%;
+      transform: translateX(-50%) rotate(45deg);
+    }
+
+    .mode-list {
+      display: flex; flex-direction: column;
+      gap: 8px; width: 420px;
+    }
+
     .mode-btn {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 14px 20px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px;
-      color: #fff;
+      padding: 16px 22px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-left: 3px solid transparent;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
-      font-size: 15px;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+      clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
     }
-    .mode-btn:hover { background: rgba(74,158,255,0.1); border-color: rgba(74,158,255,0.3); }
-    .mode-btn .mode-name { font-weight: 600; }
-    .mode-btn .mode-info { color: #888; font-size: 12px; }
-    .mode-btn .mode-players { color: #555; font-size: 12px; }
+    .mode-btn::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--accent-glow) 0%, transparent 60%);
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+    .mode-btn:hover {
+      border-color: var(--border-hover);
+      border-left-color: var(--accent);
+      transform: translateX(4px);
+    }
+    .mode-btn:hover::before { opacity: 1; }
+    .mode-btn:active { transform: translateX(2px) scale(0.99); }
 
-    /* Lobby */
+    .mode-btn .mode-name {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-primary);
+      position: relative;
+    }
+    .mode-btn .mode-info {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--text-dim);
+      margin-top: 3px;
+      letter-spacing: 0.5px;
+    }
+    .mode-btn .mode-players {
+      font-family: var(--font-display);
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      position: relative;
+      white-space: nowrap;
+    }
+
+    /* Mode-specific accent colors on hover */
+    .mode-btn[data-mode="battle_royale"]:hover { border-left-color: #ff6b4a; }
+    .mode-btn[data-mode="battle_royale"]:hover .mode-name { color: #ff6b4a; }
+    .mode-btn[data-mode^="tdm"]:hover { border-left-color: #50c878; }
+    .mode-btn[data-mode^="tdm"]:hover .mode-name { color: #50c878; }
+    .mode-btn[data-mode="ctf_3v3"]:hover { border-left-color: #ffc832; }
+    .mode-btn[data-mode="ctf_3v3"]:hover .mode-name { color: #ffc832; }
+
+    .version-tag {
+      margin-top: 40px;
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 3px;
+      font-family: var(--font-display);
+    }
+
+    /* ═══ LOBBY ═══ */
     #lobby {
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0,0,0,0.85);
-      color: #fff;
+      position: absolute; inset: 0;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: var(--bg-deep);
       z-index: 10;
+      overflow: hidden;
     }
-    #lobby h1 { font-size: 48px; margin-bottom: 4px; }
-    #lobby .mode-label { color: #4a9eff; font-size: 14px; margin-bottom: 16px; }
-    #lobby .status { color: #888; margin-bottom: 16px; }
-    #lobby button {
-      padding: 12px 32px; font-size: 18px;
-      background: #4a9eff; color: #fff;
-      border: none; border-radius: 8px; cursor: pointer;
+    #lobby::before {
+      content: '';
+      position: absolute; inset: -50%;
+      width: 200%; height: 200%;
+      background-image:
+        linear-gradient(rgba(74,158,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(74,158,255,0.02) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
     }
-    #lobby button:hover { background: #3a8eef; }
-    #lobby button:disabled { background: #555; cursor: not-allowed; }
 
-    #overlay {
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      display: none;
-      flex-direction: column;
+    .lobby-content {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column;
       align-items: center;
-      justify-content: center;
-      overflow-y: auto;
-      padding: 40px 20px;
-      background: rgba(0,0,0,0.7);
-      color: #fff;
-      z-index: 10;
+      min-width: 360px;
+    }
+
+    #lobby h1 {
+      font-family: var(--font-display);
+      font-size: 36px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      color: var(--text-primary);
+    }
+    #lobby .mode-label {
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: 3px;
+      color: var(--accent);
+      margin-top: 4px;
+      margin-bottom: 24px;
+      text-transform: uppercase;
+    }
+    #lobby .status {
+      font-family: var(--font-body);
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      letter-spacing: 1px;
+    }
+
+    #playerList {
+      width: 100%;
+      margin: 12px 0 24px;
     }
 
     .back-btn {
-      position: absolute; top: 16px; left: 16px;
-      padding: 8px 16px; background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
-      color: #aaa; cursor: pointer; font-size: 13px;
+      position: absolute; top: 24px; left: 24px;
+      padding: 8px 18px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text-dim);
+      cursor: pointer;
+      font-family: var(--font-display);
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      transition: all 0.2s;
+      clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+      z-index: 2;
     }
-    .back-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    .back-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-glow);
+    }
+
+    #readyBtn {
+      padding: 14px 48px;
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      background: transparent;
+      color: var(--text-dim);
+      border: 2px solid rgba(255,255,255,0.1);
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+    }
+    #readyBtn:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-glow);
+      box-shadow: 0 0 30px rgba(74,158,255,0.1);
+    }
+    #readyBtn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    #readyBtn.is-ready {
+      border-color: #50c878;
+      color: #50c878;
+      background: rgba(80, 200, 120, 0.1);
+      box-shadow: 0 0 30px rgba(80, 200, 120, 0.1);
+    }
+
+    /* ═══ OVERLAY ═══ */
+    #overlay {
+      position: absolute; inset: 0;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      overflow-y: auto;
+      padding: 40px 20px;
+      background: rgba(6, 8, 15, 0.85);
+      backdrop-filter: blur(8px);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      z-index: 10;
+    }
+
+    /* ═══ ANIMATIONS ═══ */
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .menu-content > * {
+      animation: fadeSlideUp 0.6s ease-out both;
+    }
+    .menu-content > *:nth-child(1) { animation-delay: 0.1s; }
+    .menu-content > *:nth-child(2) { animation-delay: 0.2s; }
+    .menu-content > *:nth-child(3) { animation-delay: 0.3s; }
+    .menu-content > *:nth-child(4) { animation-delay: 0.6s; }
+
+    .mode-btn { animation: fadeSlideUp 0.5s ease-out both; }
+    .mode-btn:nth-child(1) { animation-delay: 0.3s; }
+    .mode-btn:nth-child(2) { animation-delay: 0.38s; }
+    .mode-btn:nth-child(3) { animation-delay: 0.46s; }
+    .mode-btn:nth-child(4) { animation-delay: 0.54s; }
+    .mode-btn:nth-child(5) { animation-delay: 0.62s; }
   </style>
 </head>
 <body>
   <canvas id="game"></canvas>
 
   <div id="modeSelect">
-    <h1>BattleCircle</h1>
-    <div class="subtitle">Select a game mode</div>
-    <div class="mode-list">
-      <div class="mode-btn" data-mode="battle_royale">
-        <div>
-          <div class="mode-name">Battle Royale</div>
-          <div class="mode-info">Free-for-all, last one standing</div>
-        </div>
-        <div class="mode-players">2-8 players</div>
+    <div class="menu-content">
+      <div class="title-group">
+        <h1>BattleCircle</h1>
+        <div class="tagline">Arena Combat Redefined</div>
       </div>
-      <div class="mode-btn" data-mode="tdm_2v2">
-        <div>
-          <div class="mode-name">Team Deathmatch 2v2</div>
-          <div class="mode-info">First team to 20 kills</div>
+      <div class="divider"></div>
+      <div class="mode-list">
+        <div class="mode-btn" data-mode="battle_royale">
+          <div>
+            <div class="mode-name">Battle Royale</div>
+            <div class="mode-info">Free-for-all, last one standing</div>
+          </div>
+          <div class="mode-players">2-8</div>
         </div>
-        <div class="mode-players">4 players</div>
-      </div>
-      <div class="mode-btn" data-mode="tdm_3v3">
-        <div>
-          <div class="mode-name">Team Deathmatch 3v3</div>
-          <div class="mode-info">First team to 20 kills</div>
+        <div class="mode-btn" data-mode="tdm_2v2">
+          <div>
+            <div class="mode-name">Team Deathmatch 2v2</div>
+            <div class="mode-info">First team to 20 kills</div>
+          </div>
+          <div class="mode-players">4</div>
         </div>
-        <div class="mode-players">6 players</div>
-      </div>
-      <div class="mode-btn" data-mode="tdm_4v4">
-        <div>
-          <div class="mode-name">Team Deathmatch 4v4</div>
-          <div class="mode-info">First team to 20 kills</div>
+        <div class="mode-btn" data-mode="tdm_3v3">
+          <div>
+            <div class="mode-name">Team Deathmatch 3v3</div>
+            <div class="mode-info">First team to 20 kills</div>
+          </div>
+          <div class="mode-players">6</div>
         </div>
-        <div class="mode-players">8 players</div>
-      </div>
-      <div class="mode-btn" data-mode="ctf_3v3">
-        <div>
-          <div class="mode-name">Capture the Flag 3v3</div>
-          <div class="mode-info">Capture and hold the enemy flag</div>
+        <div class="mode-btn" data-mode="tdm_4v4">
+          <div>
+            <div class="mode-name">Team Deathmatch 4v4</div>
+            <div class="mode-info">First team to 20 kills</div>
+          </div>
+          <div class="mode-players">8</div>
         </div>
-        <div class="mode-players">6 players</div>
+        <div class="mode-btn" data-mode="ctf_3v3">
+          <div>
+            <div class="mode-name">Capture The Flag 3v3</div>
+            <div class="mode-info">Capture and hold the enemy flag</div>
+          </div>
+          <div class="mode-players">6</div>
+        </div>
       </div>
+      <div class="version-tag">V2.0</div>
     </div>
   </div>
 
   <div id="lobby">
     <button class="back-btn" id="backBtn">Back</button>
-    <h1>BattleCircle</h1>
-    <div class="mode-label" id="modeLabel"></div>
-    <div class="status">Connecting...</div>
-    <div id="playerList" style="margin:16px 0;min-width:280px"></div>
-    <button id="readyBtn" disabled style="padding:12px 32px;font-size:18px;background:#555;color:#fff;border:none;border-radius:8px;cursor:pointer">Ready Up</button>
+    <div class="lobby-content">
+      <h1>BattleCircle</h1>
+      <div class="mode-label" id="modeLabel"></div>
+      <div class="status">Connecting...</div>
+      <div id="playerList"></div>
+      <button id="readyBtn" disabled>Ready Up</button>
+    </div>
   </div>
 
   <div id="overlay"></div>

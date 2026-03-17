@@ -120,8 +120,8 @@ let currentModeConfig = null;
 readyBtn.addEventListener('click', () => {
   isReady = !isReady;
   socket.emit('toggleReady');
-  readyBtn.textContent = isReady ? 'Ready!' : 'Ready Up';
-  readyBtn.style.background = isReady ? '#50c878' : '#555';
+  readyBtn.textContent = isReady ? 'READY' : 'READY UP';
+  readyBtn.classList.toggle('is-ready', isReady);
 });
 
 socket.on('roomJoined', (data) => {
@@ -138,38 +138,40 @@ socket.on('lobbyUpdate', (data) => {
   lobbyStatus.textContent = `${data.count} / ${data.max} players`;
 
   if (data.teams) {
-    // Team lobby — show team columns with join buttons
     const blue = data.players.filter(p => p.team === 'blue');
     const red = data.players.filter(p => p.team === 'red');
     const unassigned = data.players.filter(p => !p.team);
 
+    const teamCard = (color, label, players, teamIdx) => {
+      const accent = color === 'blue' ? '#4a9eff' : '#ff6b6b';
+      const bg = color === 'blue' ? 'rgba(74,158,255,0.05)' : 'rgba(255,107,107,0.05)';
+      const borderC = color === 'blue' ? 'rgba(74,158,255,0.15)' : 'rgba(255,107,107,0.15)';
+      return `
+        <div style="flex:1;border:1px solid ${borderC};background:${bg};padding:16px;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px))">
+          <div style="font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:3px;color:${accent};margin-bottom:10px;text-transform:uppercase">${label}</div>
+          <button onclick="window._joinTeam(${teamIdx})" style="width:100%;padding:6px;background:transparent;border:1px solid ${accent};color:${accent};cursor:pointer;font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px;margin-bottom:10px;transition:background 0.2s;text-transform:uppercase"
+            onmouseover="this.style.background='${bg}'" onmouseout="this.style.background='transparent'">Join</button>
+          ${players.map(p => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;margin:3px 0;border-left:2px solid ${p.ready ? '#50c878' : accent};background:rgba(255,255,255,0.02)">
+              <span style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:500;color:${accent}">${p.name}</span>
+              ${p.ready ? '<span style="font-family:\'Orbitron\',sans-serif;font-size:9px;color:#50c878;letter-spacing:1px">READY</span>' : ''}
+            </div>`).join('')}
+        </div>`;
+    };
+
     playerList.innerHTML = `
       <div style="display:flex;gap:12px;margin-bottom:8px">
-        <div style="flex:1;text-align:center">
-          <div style="color:#4a9eff;font-weight:bold;margin-bottom:6px">Blue Team</div>
-          <button onclick="window._joinTeam(0)" style="padding:4px 12px;background:rgba(74,158,255,0.2);border:1px solid #4a9eff;color:#4a9eff;border-radius:4px;cursor:pointer;margin-bottom:6px;font-size:12px">Join Blue</button>
-          ${blue.map(p => `<div style="padding:4px 8px;margin:2px 0;background:rgba(74,158,255,0.1);border-radius:4px;font-size:13px">
-            <span style="color:#4a9eff">${p.name}</span>
-            <span style="color:${p.ready ? '#50c878' : '#555'};font-size:11px;float:right">${p.ready ? 'Ready' : ''}</span>
-          </div>`).join('')}
-        </div>
-        <div style="flex:1;text-align:center">
-          <div style="color:#ff6b6b;font-weight:bold;margin-bottom:6px">Red Team</div>
-          <button onclick="window._joinTeam(1)" style="padding:4px 12px;background:rgba(255,107,107,0.2);border:1px solid #ff6b6b;color:#ff6b6b;border-radius:4px;cursor:pointer;margin-bottom:6px;font-size:12px">Join Red</button>
-          ${red.map(p => `<div style="padding:4px 8px;margin:2px 0;background:rgba(255,107,107,0.1);border-radius:4px;font-size:13px">
-            <span style="color:#ff6b6b">${p.name}</span>
-            <span style="color:${p.ready ? '#50c878' : '#555'};font-size:11px;float:right">${p.ready ? 'Ready' : ''}</span>
-          </div>`).join('')}
-        </div>
+        ${teamCard('blue', 'Blue Team', blue, 0)}
+        ${teamCard('red', 'Red Team', red, 1)}
       </div>
-      ${unassigned.length > 0 ? `<div style="color:#888;font-size:12px;text-align:center">${unassigned.map(p => p.name).join(', ')} - pick a team</div>` : ''}
+      ${unassigned.length > 0 ? `<div style="color:#5a6480;font-size:12px;text-align:center;font-family:'Rajdhani',sans-serif;letter-spacing:1px;margin-top:8px">${unassigned.map(p => p.name).join(', ')} - select a team</div>` : ''}
     `;
   } else {
-    // FFA lobby
     playerList.innerHTML = data.players.map(p =>
-      `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin:4px 0;background:rgba(255,255,255,0.05);border-radius:6px">
-        <span style="color:#ccc">${p.name}</span>
-        <span style="color:${p.ready ? '#50c878' : '#888'};font-size:13px">${p.ready ? 'Ready' : 'Not Ready'}</span>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;margin:3px 0;border-left:2px solid ${p.ready ? '#50c878' : 'rgba(74,158,255,0.2)'};background:rgba(255,255,255,0.02);transition:background 0.15s"
+        onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'">
+        <span style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;color:#e0e6f0">${p.name}</span>
+        <span style="font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:1px;color:${p.ready ? '#50c878' : '#333a50'}">${p.ready ? 'READY' : 'WAITING'}</span>
       </div>`
     ).join('');
   }
