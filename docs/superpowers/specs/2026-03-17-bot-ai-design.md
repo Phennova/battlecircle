@@ -70,7 +70,7 @@ Every tick, the bot scores all behaviors and executes the highest-scoring one. P
 - **Never reload while exposed to an enemy** unless there is literally no other option (no cover, no weapon to swap, no grenades). In that desperate case, reload while strafing.
 - **Zone is king in BR**: pathfinding grid marks red zone cells as impassable. Bot always routes inside safe area.
 - **Enemy spotted during non-combat task**: combat priority recalculates instantly based on HP, ammo, and weapon status. High HP + ammo = engage. Low HP or dry = flee/reload.
-- **Completely out of everything** (no gun, no ammo, no grenades, no heals): rush enemies recklessly (nothing to lose).
+- **Completely out of everything** (no gun, no ammo, no grenades, no heals) AND has been alive for 15+ seconds (had time to loot): rush enemies recklessly (nothing to lose). On fresh spawn, prioritize finding a weapon first (Loot: Weapon unarmed at priority 95).
 - **Healing and reloading** both require getting to safety first — path behind cover, then channel.
 
 ## Weapon Preferences
