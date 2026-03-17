@@ -73,18 +73,21 @@ export class BotAI {
     // Build context for behaviors
     const ctx = this._buildContext();
 
-    // Score all behaviors and pick the best
-    // Add hysteresis: current behavior gets a small bonus to prevent oscillation
+    // Score all behaviors — committed goal system
+    // Bot commits to a goal and only switches if something significantly more
+    // important comes up (score exceeds committed goal by 15+)
     let bestScore = -1;
     let bestAction = null;
     const allScores = [];
+    const COMMITMENT_BONUS = 15; // how much extra priority the current goal gets
 
     for (const behavior of this.behaviors) {
       const result = behavior(bot, ctx);
       if (result.score > 0) {
-        // Hysteresis: if this behavior is currently active, give it +5 bonus
-        // to prevent flip-flopping between equal-score behaviors
-        const bonus = (this.currentBehavior === result.type) ? 5 : 0;
+        // Commitment bonus: current behavior gets a significant bonus
+        // so the bot doesn't switch unless something much more important happens
+        const isCommitted = this.currentBehavior === result.type;
+        const bonus = isCommitted ? COMMITMENT_BONUS : 0;
         const effectiveScore = result.score + bonus;
         allScores.push({ name: behavior.name, score: result.score, type: result.type });
         if (effectiveScore > bestScore) {
@@ -92,6 +95,25 @@ export class BotAI {
           bestAction = result;
         }
       }
+    }
+
+    // Also commit to the goal position — don't change goalX/goalY unless
+    // switching to a different behavior type
+    if (bestAction && this.currentBehavior === bestAction.type && this._committedGoal) {
+      // Keep the committed goal position unless we've reached it
+      const distToGoal = Math.sqrt(
+        (bot.x - this._committedGoal.x) ** 2 + (bot.y - this._committedGoal.y) ** 2
+      );
+      if (distToGoal > 40) {
+        bestAction.goalX = this._committedGoal.x;
+        bestAction.goalY = this._committedGoal.y;
+      } else {
+        // Reached goal, clear commitment
+        this._committedGoal = null;
+      }
+    } else if (bestAction && bestAction.goalX !== undefined) {
+      // New behavior — commit to its goal
+      this._committedGoal = { x: bestAction.goalX, y: bestAction.goalY };
     }
 
     // Debug logging (throttled to once per second per bot)
