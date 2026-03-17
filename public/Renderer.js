@@ -6,6 +6,9 @@ export class Renderer {
     this.allWalls = [];
     this.shadowCanvas = document.createElement('canvas');
     this.shadowCtx = this.shadowCanvas.getContext('2d');
+    this.screenShake = { x: 0, y: 0, intensity: 0, startTime: 0, duration: 0 };
+    this._floorPattern = null;
+    this._buildingPattern = null;
   }
 
   setMap(map) {
@@ -14,6 +17,68 @@ export class Renderer {
     for (const b of map.buildings) {
       this.allWalls.push(...b.walls);
     }
+    this._createFloorPatterns();
+  }
+
+  _createFloorPatterns() {
+    // Create a subtle tiled floor pattern
+    const tile = document.createElement('canvas');
+    tile.width = 40;
+    tile.height = 40;
+    const tc = tile.getContext('2d');
+    tc.fillStyle = '#1a1a2e';
+    tc.fillRect(0, 0, 40, 40);
+    // Subtle grid lines
+    tc.strokeStyle = 'rgba(255,255,255,0.03)';
+    tc.lineWidth = 1;
+    tc.strokeRect(0.5, 0.5, 39, 39);
+    // Random noise dots for texture
+    tc.fillStyle = 'rgba(255,255,255,0.015)';
+    for (let i = 0; i < 8; i++) {
+      tc.fillRect(Math.random() * 38 + 1, Math.random() * 38 + 1, 1, 1);
+    }
+    tc.fillStyle = 'rgba(0,0,0,0.03)';
+    for (let i = 0; i < 5; i++) {
+      tc.fillRect(Math.random() * 38 + 1, Math.random() * 38 + 1, 2, 2);
+    }
+    this._floorPattern = this.ctx.createPattern(tile, 'repeat');
+
+    // Building floor pattern — lighter with checkered hint
+    const btile = document.createElement('canvas');
+    btile.width = 40;
+    btile.height = 40;
+    const bc = btile.getContext('2d');
+    bc.fillStyle = '#252540';
+    bc.fillRect(0, 0, 40, 40);
+    bc.fillStyle = 'rgba(255,255,255,0.02)';
+    bc.fillRect(0, 0, 20, 20);
+    bc.fillRect(20, 20, 20, 20);
+    bc.strokeStyle = 'rgba(255,255,255,0.04)';
+    bc.lineWidth = 0.5;
+    bc.strokeRect(0.5, 0.5, 39, 39);
+    this._buildingPattern = this.ctx.createPattern(btile, 'repeat');
+  }
+
+  triggerScreenShake(intensity, duration) {
+    this.screenShake.intensity = intensity;
+    this.screenShake.startTime = performance.now();
+    this.screenShake.duration = duration;
+  }
+
+  _getShakeOffset() {
+    const s = this.screenShake;
+    if (s.intensity <= 0) return { x: 0, y: 0 };
+    const elapsed = performance.now() - s.startTime;
+    if (elapsed > s.duration) {
+      s.intensity = 0;
+      return { x: 0, y: 0 };
+    }
+    const decay = 1 - elapsed / s.duration;
+    const mag = s.intensity * decay;
+    return {
+      x: (Math.random() - 0.5) * 2 * mag,
+      y: (Math.random() - 0.5) * 2 * mag
+    };
   }
 
   draw(cameraX, cameraY, visibilityPolygon, cameraScale, destroyedWalls, visionRange) {
@@ -28,20 +93,31 @@ export class Renderer {
     this._lastCameraY = cameraY;
     this._lastDestroyed = destroyedWalls;
 
-    const offsetX = canvas.width / 2 - cameraX * scale;
-    const offsetY = canvas.height / 2 - cameraY * scale;
+    const shake = this._getShakeOffset();
+    const offsetX = canvas.width / 2 - cameraX * scale + shake.x;
+    const offsetY = canvas.height / 2 - cameraY * scale + shake.y;
+    this._shakeOffsetX = shake.x;
+    this._shakeOffsetY = shake.y;
 
     ctx.save();
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
 
-    // Floor
-    ctx.fillStyle = '#1a1a2e';
+    // Floor with texture pattern
+    if (this._floorPattern) {
+      ctx.fillStyle = this._floorPattern;
+    } else {
+      ctx.fillStyle = '#1a1a2e';
+    }
     ctx.fillRect(0, 0, map.width, map.height);
 
-    // Building floors (lighter)
-    ctx.fillStyle = '#252540';
+    // Building floors with checkered pattern
     for (const b of map.buildings) {
+      if (this._buildingPattern) {
+        ctx.fillStyle = this._buildingPattern;
+      } else {
+        ctx.fillStyle = '#252540';
+      }
       ctx.fillRect(b.x, b.y, b.w, b.h);
     }
 
@@ -63,18 +139,39 @@ export class Renderer {
       this.drawShadow(visibilityPolygon, cameraX, cameraY, scale, visionRange);
     }
 
-    // Walls on top of shadow
-    const offsetX = canvas.width / 2 - cameraX * scale;
-    const offsetY = canvas.height / 2 - cameraY * scale;
+    // Walls on top of shadow with drop shadows and beveled edges
+    const sx = this._shakeOffsetX || 0;
+    const sy = this._shakeOffsetY || 0;
+    const offsetX = canvas.width / 2 - cameraX * scale + sx;
+    const offsetY = canvas.height / 2 - cameraY * scale + sy;
     ctx.save();
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
     const destroyed = destroyedWalls ? new Set(destroyedWalls) : new Set();
-    ctx.fillStyle = '#555';
+
+    // Drop shadows first
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
     for (let wi = 0; wi < this.allWalls.length; wi++) {
       if (destroyed.has(wi)) continue;
       const w = this.allWalls[wi];
+      ctx.fillRect(w.x + 3, w.y + 3, w.w, w.h);
+    }
+
+    // Wall bodies
+    for (let wi = 0; wi < this.allWalls.length; wi++) {
+      if (destroyed.has(wi)) continue;
+      const w = this.allWalls[wi];
+      // Main body
+      ctx.fillStyle = '#5a5a6a';
       ctx.fillRect(w.x, w.y, w.w, w.h);
+      // Top/left highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.fillRect(w.x, w.y, w.w, 2);
+      ctx.fillRect(w.x, w.y, 2, w.h);
+      // Bottom/right dark edge
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.fillRect(w.x, w.y + w.h - 2, w.w, 2);
+      ctx.fillRect(w.x + w.w - 2, w.y, 2, w.h);
     }
     if (destroyed.size > 0) {
       ctx.fillStyle = '#443322';
@@ -130,9 +227,26 @@ export class Renderer {
     shadowCtx.closePath();
     shadowCtx.fill();
 
-    // Now paint back darkness outside the circle to clip to round shape
+    // Soft gradient edge at vision boundary instead of hard circle
     shadowCtx.globalCompositeOperation = 'source-over';
-    shadowCtx.fillStyle = 'rgba(0, 0, 0, 0.97)';
+    const fadeWidth = radius * 0.15; // 15% of radius is the fade zone
+    const innerRadius = radius - fadeWidth;
+
+    // Radial gradient: transparent center -> dark edge
+    const grad = shadowCtx.createRadialGradient(
+      centerX, centerY, innerRadius,
+      centerX, centerY, radius
+    );
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.97)');
+    shadowCtx.fillStyle = grad;
+    shadowCtx.beginPath();
+    shadowCtx.rect(0, 0, canvas.width, canvas.height);
+    shadowCtx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2, true);
+    shadowCtx.fill('evenodd');
+
+    // Full darkness beyond the radius
+    shadowCtx.fillStyle = 'rgba(0,0,0,0.97)';
     shadowCtx.beginPath();
     shadowCtx.rect(0, 0, canvas.width, canvas.height);
     shadowCtx.arc(centerX, centerY, radius, 0, Math.PI * 2, true);
@@ -142,6 +256,16 @@ export class Renderer {
 
     // Blit onto main canvas
     ctx.drawImage(shadowCanvas, 0, 0);
+
+    // Vignette — subtle darkening at screen corners
+    const vigGrad = ctx.createRadialGradient(
+      canvas.width / 2, canvas.height / 2, canvas.width * 0.3,
+      canvas.width / 2, canvas.height / 2, canvas.width * 0.7
+    );
+    vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    vigGrad.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = vigGrad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
   drawPlayer(x, y, angle, radius, color, health, maxHealth, gunType, name) {
@@ -254,7 +378,7 @@ export class Renderer {
     const { ctx, canvas } = this;
     ctx.save();
     const _s = this._currentScale || 1;
-    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
     ctx.scale(_s, _s);
     for (const b of bullets) {
       if (b.type === 'shrapnel') {
@@ -308,7 +432,7 @@ export class Renderer {
     const { ctx, canvas } = this;
     ctx.save();
     const _s = this._currentScale || 1;
-    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
     ctx.scale(_s, _s);
 
     const EQUIP_COLORS = {
@@ -542,7 +666,7 @@ export class Renderer {
     const { ctx, canvas } = this;
     ctx.save();
     const _s = this._currentScale || 1;
-    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
     ctx.scale(_s, _s);
     for (const g of grenades) {
       ctx.fillStyle = '#ff8c42';
@@ -565,7 +689,7 @@ export class Renderer {
     if (!zone || !zone.active) return;
     const { ctx, canvas, map } = this;
     const _s = this._currentScale || 1;
-    const offsetX = canvas.width / 2 - cameraX * _s;
+    const offsetX = canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0);
     const offsetY = canvas.height / 2 - cameraY * _s;
 
     ctx.save();
@@ -588,7 +712,7 @@ export class Renderer {
     const { ctx, canvas } = this;
     ctx.save();
     const _s = this._currentScale || 1;
-    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
     ctx.scale(_s, _s);
     for (const exp of explosions) {
       const elapsed = now - exp.startTime;
@@ -618,7 +742,7 @@ export class Renderer {
     const { ctx, canvas } = this;
     ctx.save();
     const _s = this._currentScale || 1;
-    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
     ctx.scale(_s, _s);
 
     for (const smoke of smokes) {
@@ -658,7 +782,7 @@ export class Renderer {
     const { ctx, canvas } = this;
     ctx.save();
     const _s = this._currentScale || 1;
-    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
     ctx.scale(_s, _s);
 
     for (const b of bullets) {
@@ -691,7 +815,7 @@ export class Renderer {
     const { ctx, canvas } = this;
     ctx.save();
     const _s = this._currentScale || 1;
-    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
     ctx.scale(_s, _s);
 
     for (const door of doors) {
@@ -789,7 +913,7 @@ export class Renderer {
   drawCTFTerritories(cameraX, cameraY, mapWidth, mapHeight) {
     const { ctx, canvas } = this;
     const _s = this._currentScale || 1;
-    const offsetX = canvas.width / 2 - cameraX * _s;
+    const offsetX = canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0);
     const offsetY = canvas.height / 2 - cameraY * _s;
 
     ctx.save();
@@ -816,7 +940,7 @@ export class Renderer {
     const { ctx, canvas } = this;
     ctx.save();
     const _s = this._currentScale || 1;
-    ctx.translate(canvas.width / 2 - cameraX * _s, canvas.height / 2 - cameraY * _s);
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
     ctx.scale(_s, _s);
 
     for (const flag of flags) {

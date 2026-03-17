@@ -237,6 +237,7 @@ socket.on('gameState', (state) => {
         const old = gameState.grenades.find(g => g.id === id);
         if (old && old.type !== 'smoke') {
           effects.explosions.push({ x: old.x, y: old.y, startTime: performance.now(), duration: 400 });
+          renderer.triggerScreenShake(8, 300);
         }
       }
     }
@@ -257,6 +258,7 @@ socket.on('gameState', (state) => {
 
 socket.on('playerHit', (data) => {
   effects.hitFlash = { angle: data.angle, startTime: performance.now(), duration: 300 };
+  renderer.triggerScreenShake(data.damage * 0.3, 200);
 });
 
 socket.on('playerKilled', (data) => {
@@ -758,7 +760,7 @@ function loop(timestamp) {
 
       // Other players (all alive — shadow covers hidden parts)
       ctx.save();
-      ctx.translate(canvas.width / 2 - viewX * cameraScale, canvas.height / 2 - viewY * cameraScale);
+      ctx.translate(canvas.width / 2 - viewX * cameraScale + (renderer._shakeOffsetX||0), canvas.height / 2 - viewY * cameraScale + (renderer._shakeOffsetY||0));
       ctx.scale(cameraScale, cameraScale);
 
       const playerIndex = gameState.players.findIndex(p => p.id === myId);
@@ -784,7 +786,7 @@ function loop(timestamp) {
 
       // Local player drawn ABOVE shadow (always fully visible)
       ctx.save();
-      ctx.translate(canvas.width / 2 - viewX * cameraScale, canvas.height / 2 - viewY * cameraScale);
+      ctx.translate(canvas.width / 2 - viewX * cameraScale + (renderer._shakeOffsetX||0), canvas.height / 2 - viewY * cameraScale + (renderer._shakeOffsetY||0));
       ctx.scale(cameraScale, cameraScale);
       const myGunType = me.gun ? me.gun.type : null;
       renderer.drawPlayer(viewX, viewY, inp.angle, PLAYER_RADIUS, getPlayerColor(me, playerIndex), me.health, PLAYER_HP, myGunType, me.name);
