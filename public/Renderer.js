@@ -16,7 +16,7 @@ export class Renderer {
     }
   }
 
-  draw(cameraX, cameraY, visibilityPolygon, cameraScale, destroyedWalls) {
+  draw(cameraX, cameraY, visibilityPolygon, cameraScale, destroyedWalls, visionRange) {
     const { ctx, canvas, map } = this;
     if (!map) return;
 
@@ -43,7 +43,7 @@ export class Renderer {
 
     // Shadow overlay (screen-space)
     if (visibilityPolygon) {
-      this.drawShadow(visibilityPolygon, cameraX, cameraY, scale);
+      this.drawShadow(visibilityPolygon, cameraX, cameraY, scale, visionRange);
     }
 
     // Walls drawn ABOVE shadow so always visible
@@ -77,7 +77,7 @@ export class Renderer {
     ctx.restore();
   }
 
-  drawShadow(visibilityPolygon, cameraX, cameraY, scale) {
+  drawShadow(visibilityPolygon, cameraX, cameraY, scale, visionRange) {
     const { ctx, canvas, shadowCanvas, shadowCtx, map } = this;
     if (!map || visibilityPolygon.length < 3) return;
 
@@ -87,12 +87,16 @@ export class Renderer {
     const s = scale || 1;
     const offsetX = canvas.width / 2 - cameraX * s;
     const offsetY = canvas.height / 2 - cameraY * s;
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = (visionRange || 600) * s;
 
     // Fill with dark
     shadowCtx.fillStyle = 'rgba(0, 0, 0, 0.88)';
     shadowCtx.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
 
-    // Cut out visibility polygon
+    // Cut out: intersect visibility polygon with a circle
+    // First cut the polygon
     shadowCtx.globalCompositeOperation = 'destination-out';
     shadowCtx.fillStyle = '#fff';
     shadowCtx.beginPath();
@@ -108,6 +112,15 @@ export class Renderer {
     }
     shadowCtx.closePath();
     shadowCtx.fill();
+
+    // Now paint back darkness outside the circle to clip to round shape
+    shadowCtx.globalCompositeOperation = 'source-over';
+    shadowCtx.fillStyle = 'rgba(0, 0, 0, 0.88)';
+    shadowCtx.beginPath();
+    shadowCtx.rect(0, 0, canvas.width, canvas.height);
+    shadowCtx.arc(centerX, centerY, radius, 0, Math.PI * 2, true);
+    shadowCtx.fill('evenodd');
+
     shadowCtx.globalCompositeOperation = 'source-over';
 
     // Blit onto main canvas

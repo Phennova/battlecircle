@@ -706,7 +706,7 @@ function loop(timestamp) {
       }
 
       // Render
-      renderer.draw(viewX, viewY, visibility, cameraScale, gameState.destroyedWalls);
+      renderer.draw(viewX, viewY, visibility, cameraScale, gameState.destroyedWalls, effectiveVisionRange);
 
       // CTF territory tint and flag zones
       if (gameState.flags) {
