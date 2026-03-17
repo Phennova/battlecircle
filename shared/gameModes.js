@@ -66,6 +66,40 @@ export const GAME_MODES = {
     respawnTime: 3000,
     ctf: true,
     holdTimeToWin: 180
+  },
+
+  // ── ARCADE MODES (1 human + bots) ──
+  arcade_br: {
+    name: 'Arcade: Battle Royale',
+    description: 'Battle Royale vs bots',
+    minPlayers: 1, maxPlayers: 1,
+    teams: false, respawn: false, scoreToWin: null,
+    hasZone: true, respawnTime: 0,
+    arcade: true, botCount: 7
+  },
+  arcade_tdm_2v2: {
+    name: 'Arcade: TDM 2v2',
+    description: 'Team elimination vs bots',
+    minPlayers: 1, maxPlayers: 1,
+    teams: true, teamSize: 2, teamCount: 2,
+    respawn: false, scoreToWin: null, hasZone: false, respawnTime: 0,
+    teamElimination: true, arcade: true, botCount: 3
+  },
+  arcade_tdm_3v3: {
+    name: 'Arcade: TDM 3v3',
+    description: 'Team elimination vs bots',
+    minPlayers: 1, maxPlayers: 1,
+    teams: true, teamSize: 3, teamCount: 2,
+    respawn: false, scoreToWin: null, hasZone: false, respawnTime: 0,
+    teamElimination: true, arcade: true, botCount: 5
+  },
+  arcade_ctf: {
+    name: 'Arcade: CTF 3v3',
+    description: 'Capture the Flag vs bots',
+    minPlayers: 1, maxPlayers: 1,
+    teams: true, teamSize: 3, teamCount: 2,
+    respawn: true, scoreToWin: null, hasZone: false, respawnTime: 3000,
+    ctf: true, holdTimeToWin: 180, arcade: true, botCount: 5
   }
 };
 

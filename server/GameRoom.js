@@ -2,6 +2,8 @@ import { Player } from './Player.js';
 import { Bullet } from './Bullet.js';
 import { Grenade } from './Grenade.js';
 import { generateName } from './names.js';
+import { BotAI } from './BotAI.js';
+import { NavGrid } from './NavGrid.js';
 import { resolveAgainstWalls } from '../shared/collision.js';
 import { PLAYER_RADIUS, BULLET_RADIUS, PICKUP_RANGE, TICK_INTERVAL } from '../shared/constants.js';
 import { WEAPONS, AMMO_TYPES } from '../shared/weapons.js';
@@ -69,6 +71,8 @@ export class GameRoom {
     this.lastTickTime = null;
     this.usedNames = new Set();
     this.finishedPlayers = [];
+    this.bots = []; // BotAI instances
+    this.navGrid = new NavGrid(map.width, map.height);
 
     // Static walls (never change)
     this.staticWalls = [...map.walls];
@@ -446,6 +450,113 @@ export class GameRoom {
         this.allWalls.push(door.wallRect);
       }
     }
+    // Rebuild nav grid
+    this.navGrid.buildFromWalls(this.allWalls);
+  }
+
+  _spawnBots() {
+    const botCount = this.mode.botCount || 0;
+    if (botCount <= 0) return;
+
+    for (let i = 0; i < botCount; i++) {
+      const botId = `bot_${i}_${Date.now()}`;
+      const name = generateName(this.usedNames);
+      this.usedNames.add(name);
+      const bot = new Player(botId, 0, 0, name);
+      bot.isBot = true;
+
+      // Assign team for team modes
+      if (this.mode.teams) {
+        const teamCounts = [0, 0];
+        this.players.forEach(p => { if (p.team !== undefined) teamCounts[p.team]++; });
+        bot.team = teamCounts[0] <= teamCounts[1] ? 0 : 1;
+      }
+
+      this.players.set(botId, bot);
+
+      // Create AI controller
+      const ai = new BotAI(bot, this);
+      this.bots.push(ai);
+
+      // Assign CTF roles
+      if (this.mode.ctf) {
+        const teamBots = this.bots.filter(b => b.bot.team === bot.team);
+        if (teamBots.length === 1) ai.ctfRole = 'attacker';
+        else if (teamBots.length === 2) ai.ctfRole = 'defender';
+        else ai.ctfRole = 'support';
+      }
+    }
+  }
+
+  _handleBotAction(botId, action, data) {
+    const bot = this.players.get(botId);
+    if (!bot || !bot.alive) return;
+
+    switch (action) {
+      case 'pickup': {
+        // Check for nearby door first
+        const nearDoor = this._findNearbyDoor(bot);
+        if (nearDoor) {
+          nearDoor.open = !nearDoor.open;
+          this._rebuildAllWalls();
+          return;
+        }
+        this._handlePickup(bot);
+        break;
+      }
+      case 'throwGrenade':
+        if (bot.grenade && bot.grenade.count > 0 && !bot.healing) {
+          const grenType = bot.grenade.type;
+          bot.grenade.count--;
+          if (bot.grenade.count <= 0) bot.grenade = null;
+          this.grenades.push(new Grenade(bot.id, bot.x, bot.y, bot.angle, grenType));
+        }
+        break;
+      case 'useHeal':
+        if (bot.heal && bot.heal.count > 0 && !bot.healing && !bot.reloading && bot.health < 100) {
+          bot.healing = true;
+          const healTime = bot.heal.type === 'medkit' ? 4000 : 1500;
+          bot.healingUntil = Date.now() + healTime;
+        }
+        break;
+      case 'reload':
+        if (bot.gun && !bot.reloading && !bot.healing) {
+          const weapon = WEAPONS[bot.gun.type];
+          if (bot.gun.magAmmo < weapon.magSize && bot.ammoReserve[weapon.ammoType] > 0) {
+            bot.reloading = true;
+            bot.reloadingUntil = Date.now() + weapon.reloadTime;
+          }
+        }
+        break;
+      case 'sniperFire':
+        if (bot.gun && bot.gun.type === 'sniper' && !bot.healing && !bot.reloading) {
+          const weapon = WEAPONS.sniper;
+          const now = Date.now();
+          if (now - bot.lastShotTime < 1000 / weapon.fireRate) return;
+          if (bot.gun.magAmmo <= 0) return;
+          bot.lastShotTime = now;
+          bot.gun.magAmmo--;
+          const angle = data?.angle || bot.angle;
+          const lineLen = 3000;
+          const endX = bot.x + Math.cos(angle) * lineLen;
+          const endY = bot.y + Math.sin(angle) * lineLen;
+          // Hitscan damage
+          this.players.forEach((target) => {
+            if (!target.alive || target.id === bot.id) return;
+            if (this.mode.teams && bot.team === target.team) return;
+            const dist = this._pointToLineDist(target.x, target.y, bot.x, bot.y, endX, endY);
+            if (dist < PLAYER_RADIUS) {
+              target.health -= weapon.damage;
+              bot.damageDealt += weapon.damage;
+              if (target.health <= 0) {
+                this._handleKill(target, bot.id, 'sniper');
+              }
+            }
+          });
+          this.io.to(this.id).emit('sniperLine', { x: bot.x, y: bot.y, angle, endX, endY, shooterId: bot.id });
+        }
+        break;
+    }
   }
 
   _broadcastLobby() {
@@ -482,6 +593,11 @@ export class GameRoom {
   _startCountdown() {
     this.state = STATES.COUNTDOWN;
     if (!this.mode.ctf) this._spawnLoot();
+
+    // Spawn bots for arcade modes
+    if (this.mode.arcade) {
+      this._spawnBots();
+    }
 
     // Re-assign spawn positions now that teams are finalized
     this._assignSpawnPositions();
@@ -668,6 +784,21 @@ export class GameRoom {
     const dt = Math.min((now - this.lastTickTime) / 1000, 0.1);
     this.lastTickTime = now;
     this.tick++;
+
+    // 0. Run bot AI (sets bot.input before movement processing)
+    for (const botAI of this.bots) {
+      try {
+        botAI.tick(dt);
+      } catch (e) {
+        // Don't let a bot AI error crash the game loop
+        console.error('Bot AI error:', e.message);
+      }
+    }
+
+    // Update nav grid zone marking in BR
+    if (this.zone && this.zone.active) {
+      this.navGrid.markZone(this.zone.centerX, this.zone.centerY, this.zone.currentRadius);
+    }
 
     // 1. Move players
     this.players.forEach((player) => {
