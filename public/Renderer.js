@@ -1,3 +1,5 @@
+import { WEAPONS } from '/shared/weapons.js';
+
 export class Renderer {
   constructor(canvas, ctx) {
     this.canvas = canvas;
