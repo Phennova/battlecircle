@@ -247,9 +247,12 @@ export class BotAI {
           bot.input.angle = bot.angle;
         }
 
-        // Movement based on engagement
+        // Movement based on engagement — never get closer than 50px
         if (engagement === 'push') {
-          this._navigateTo(enemy.x, enemy.y, ctx, dt);
+          if (dist > 50) {
+            this._navigateTo(enemy.x, enemy.y, ctx, dt);
+          }
+          // If within 50px, stop pushing — just shoot
         } else if (engagement === 'retreat') {
           const awayAngle = Math.atan2(bot.y - enemy.y, bot.x - enemy.x);
           this._navigateTo(
@@ -442,33 +445,45 @@ export class BotAI {
     const movedDist = Math.sqrt((bot.x - this.lastPos.x) ** 2 + (bot.y - this.lastPos.y) ** 2);
     if (movedDist < 1) {
       this.stuckTimer += dt;
-      if (this.stuckTimer > 0.5) {
-        // Stuck recovery — try perpendicular directions
+      this.stuckCount = (this.stuckCount || 0);
+
+      if (this.stuckTimer > 0.3) {
         this.stuckTimer = 0;
-        this.currentPath = []; // force path recalc
-        this.pathRecalcTimer = 0; // recalc immediately
+        this.stuckCount++;
+        this.currentPath = [];
+        this.pathRecalcTimer = 0;
 
-        // Try 4 perpendicular escape directions
-        const escapeAngle = Math.atan2(goalY - bot.y, goalX - bot.x);
-        const tryAngles = [
-          escapeAngle + Math.PI / 2,
-          escapeAngle - Math.PI / 2,
-          escapeAngle + Math.PI, // backwards
-          escapeAngle + Math.PI / 4
-        ];
-        const chosen = tryAngles[Math.floor(Math.random() * tryAngles.length)];
-        bot.input.right = Math.cos(chosen) > 0.3;
-        bot.input.left = Math.cos(chosen) < -0.3;
-        bot.input.down = Math.sin(chosen) > 0.3;
-        bot.input.up = Math.sin(chosen) < -0.3;
-
-        // Also change patrol/hunt goal so we don't keep trying the same blocked spot
+        // Clear goals
         bot._lootPatrolGoal = null;
         bot._huntGoal = null;
         bot._patrolGoal = null;
+
+        if (this.stuckCount > 4) {
+          // Stuck too many times — head toward map center
+          this.stuckCount = 0;
+          const ctx2 = this._buildContext();
+          const centerX = ctx2.map.width / 2 + (Math.random() - 0.5) * 300;
+          const centerY = ctx2.map.height / 2 + (Math.random() - 0.5) * 300;
+          bot._lootPatrolGoal = { x: centerX, y: centerY };
+          bot._huntGoal = { x: centerX, y: centerY };
+        }
+
+        // Cycle through all 8 directions systematically
+        const escapeDir = this.stuckCount % 8;
+        const angles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
+        const chosen = angles[escapeDir];
+
+        // Clear all input then set escape direction
+        bot.input.up = false; bot.input.down = false;
+        bot.input.left = false; bot.input.right = false;
+        if (Math.cos(chosen) > 0.3) bot.input.right = true;
+        if (Math.cos(chosen) < -0.3) bot.input.left = true;
+        if (Math.sin(chosen) > 0.3) bot.input.down = true;
+        if (Math.sin(chosen) < -0.3) bot.input.up = true;
       }
     } else {
       this.stuckTimer = 0;
+      if (movedDist > 5) this.stuckCount = 0; // reset if really moving
     }
     this.lastPos = { x: bot.x, y: bot.y };
   }
