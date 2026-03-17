@@ -1233,7 +1233,37 @@ export class GameRoom {
   _checkWin() {
     if (this.state !== STATES.ACTIVE) return;
 
-    // TDM: check team scores
+    // TDM team elimination: check if an entire team is dead
+    if (this.mode.teamElimination) {
+      const teamAlive = [0, 0];
+      this.players.forEach(p => {
+        if (p.alive && p.team !== undefined) teamAlive[p.team]++;
+      });
+
+      for (let t = 0; t < 2; t++) {
+        if (teamAlive[t] === 0 && teamAlive[1 - t] > 0) {
+          this.state = STATES.ENDED;
+          clearInterval(this.tickInterval);
+          const winningTeam = TEAM_COLORS[1 - t];
+          const standings = [...this.players.values()].map(p => ({
+            name: p.name,
+            team: TEAM_COLORS[p.team] || '?',
+            kills: p.kills,
+            damageDealt: Math.round(p.damageDealt)
+          })).sort((a, b) => b.kills - a.kills);
+          this.io.to(this.id).emit('gameOver', {
+            winnerId: null,
+            winningTeam,
+            teamScores: [teamAlive[0], teamAlive[1]],
+            standings
+          });
+          return;
+        }
+      }
+      return;
+    }
+
+    // TDM score-based: check team scores
     if (this.mode.teams && this.mode.scoreToWin) {
       for (let t = 0; t < this.teamScores.length; t++) {
         if (this.teamScores[t] >= this.mode.scoreToWin) {
@@ -1255,7 +1285,7 @@ export class GameRoom {
           return;
         }
       }
-      return; // TDM doesn't use last-alive win condition
+      return;
     }
 
     // Battle Royale: last alive wins
