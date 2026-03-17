@@ -67,6 +67,9 @@ export class BotAI {
     // Update awareness
     this._updateAwareness(dt);
 
+    // Stuck detection — runs BEFORE behavior evaluation
+    this._checkStuck(dt);
+
     // Build context for behaviors
     const ctx = this._buildContext();
 
@@ -215,6 +218,12 @@ export class BotAI {
   _executeAction(action, ctx, dt) {
     const bot = this.bot;
 
+    // If escaping from stuck, don't reset input — let the escape direction apply
+    if (this._escaping) {
+      this._escaping = false;
+      return; // skip entire action this tick, just move in escape direction
+    }
+
     // Reset input
     bot.input.up = false;
     bot.input.down = false;
@@ -351,11 +360,7 @@ export class BotAI {
     const bot = this.bot;
     const navGrid = this.room.navGrid;
 
-    // If stuck recovery just set an escape direction, don't override it
-    if (this._escaping) {
-      this._escaping = false;
-      return;
-    }
+    // (escaping check now handled in _executeAction)
 
     // If bot is on a blocked cell, override goal to nearest walkable cell
     if (navGrid) {
@@ -447,9 +452,17 @@ export class BotAI {
       }
     }
 
-    // Stuck detection — fast response
+    // (stuck detection moved to _checkStuck, runs in tick() before behaviors)
+  }
+
+  /**
+   * Check if bot is stuck and force escape movement.
+   */
+  _checkStuck(dt) {
+    const bot = this.bot;
     const movedDist = Math.sqrt((bot.x - this.lastPos.x) ** 2 + (bot.y - this.lastPos.y) ** 2);
-    if (movedDist < 3) { // catch oscillation (1-2px jitter)
+
+    if (movedDist < 3) {
       this.stuckTimer += dt;
       this.stuckCount = (this.stuckCount || 0);
 
@@ -459,30 +472,26 @@ export class BotAI {
         this.currentPath = [];
         this.pathRecalcTimer = 0;
 
-        // Clear goals
+        // Clear all goals
         bot._lootPatrolGoal = null;
         bot._huntGoal = null;
         bot._patrolGoal = null;
 
         if (this.stuckCount > 4) {
-          // Stuck too many times — head toward map center
+          // Head toward map center
           this.stuckCount = 0;
-          const ctx2 = this._buildContext();
-          const centerX = ctx2.map.width / 2 + (Math.random() - 0.5) * 300;
-          const centerY = ctx2.map.height / 2 + (Math.random() - 0.5) * 300;
+          const centerX = this.room.map.width / 2 + (Math.random() - 0.5) * 300;
+          const centerY = this.room.map.height / 2 + (Math.random() - 0.5) * 300;
           bot._lootPatrolGoal = { x: centerX, y: centerY };
           bot._huntGoal = { x: centerX, y: centerY };
         }
 
-        // Skip navigation this tick so escape direction isn't overwritten
+        // Set escape direction — cycle all 8 systematically
         this._escaping = true;
-
-        // Cycle through all 8 directions systematically
         const escapeDir = this.stuckCount % 8;
         const angles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
         const chosen = angles[escapeDir];
 
-        // Clear all input then set escape direction
         bot.input.up = false; bot.input.down = false;
         bot.input.left = false; bot.input.right = false;
         if (Math.cos(chosen) > 0.3) bot.input.right = true;
@@ -492,7 +501,7 @@ export class BotAI {
       }
     } else {
       this.stuckTimer = 0;
-      if (movedDist > 5) this.stuckCount = 0; // reset if really moving
+      if (movedDist > 5) this.stuckCount = 0;
     }
     this.lastPos = { x: bot.x, y: bot.y };
   }
