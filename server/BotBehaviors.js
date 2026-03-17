@@ -331,22 +331,25 @@ function huntEnemy(bot, ctx) {
   if (ctx.nearestEnemy && ctx.canSeeEnemy) return { score: 0 };
   if (!ctx.modeRequiresKills) return { score: 0 };
 
-  // Move toward last known enemy position or high-traffic area (map center)
-  let goalX = ctx.map.width / 2 + (Math.random() - 0.5) * 400;
-  let goalY = ctx.map.height / 2 + (Math.random() - 0.5) * 400;
-
+  // Use last known enemy or sound, otherwise persist a hunt goal
   if (ctx.lastKnownEnemy) {
-    goalX = ctx.lastKnownEnemy.x;
-    goalY = ctx.lastKnownEnemy.y;
+    bot._huntGoal = { x: ctx.lastKnownEnemy.x, y: ctx.lastKnownEnemy.y };
   } else if (ctx.soundSource) {
-    goalX = ctx.soundSource.x;
-    goalY = ctx.soundSource.y;
+    bot._huntGoal = { x: ctx.soundSource.x, y: ctx.soundSource.y };
+  }
+
+  // Pick a new random hunt goal if we don't have one or we reached it
+  if (!bot._huntGoal || distSq(bot, bot._huntGoal) < 3600) {
+    bot._huntGoal = {
+      x: 200 + Math.random() * (ctx.map.width - 400),
+      y: 200 + Math.random() * (ctx.map.height - 400)
+    };
   }
 
   return {
     score: 45,
     type: 'move',
-    goalX, goalY
+    goalX: bot._huntGoal.x, goalY: bot._huntGoal.y
   };
 }
 

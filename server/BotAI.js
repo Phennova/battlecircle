@@ -222,15 +222,9 @@ export class BotAI {
       case 'move':
       case 'move_and_pickup':
       case 'patrol_for_loot':
-      case 'patrol_for_loot':
-        this._navigateTo(action.goalX, action.goalY, ctx, dt);
-        // Auto-pickup when near items
-        if (action.type === 'move_and_pickup') {
-          const dist = Math.sqrt((action.goalX - bot.x) ** 2 + (action.goalY - bot.y) ** 2);
-          if (dist < PICKUP_RANGE) {
-            this._emitAction('pickup');
-          }
-        }
+        this._navigateTo(action.goalX || bot.x, action.goalY || bot.y, ctx, dt);
+        // Always try to pick up nearby equipment while moving
+        this._opportunisticPickup(ctx);
         break;
 
       case 'combat': {
@@ -432,6 +426,21 @@ export class BotAI {
       this.stuckTimer = 0;
     }
     this.lastPos = { x: bot.x, y: bot.y };
+  }
+
+  /**
+   * Try to pick up nearby equipment items while passing by.
+   */
+  _opportunisticPickup(ctx) {
+    const bot = this.bot;
+    for (const item of (ctx.visibleItems || [])) {
+      if (item.slot === 'ammo') continue; // ammo auto-collects
+      const dist = Math.sqrt((item.x - bot.x) ** 2 + (item.y - bot.y) ** 2);
+      if (dist < PICKUP_RANGE + 10) {
+        this._emitAction('pickup');
+        return;
+      }
+    }
   }
 
   /**
