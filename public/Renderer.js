@@ -9,6 +9,15 @@ export class Renderer {
     this.screenShake = { x: 0, y: 0, intensity: 0, startTime: 0, duration: 0 };
     this._floorPattern = null;
     this._buildingPattern = null;
+
+    // Particle systems
+    this.particles = []; // { x, y, vx, vy, life, maxLife, color, size }
+    this.dustMotes = []; // ambient floating particles
+    this.footsteps = []; // { x, y, time }
+    this.damageNumbers = []; // { x, y, text, time, color }
+    this.hitMarker = null; // { time }
+    this.muzzleFlashes = []; // { x, y, time }
+    this.deathAnims = []; // { x, y, time, color, radius }
   }
 
   setMap(map) {
@@ -1031,6 +1040,243 @@ export class Renderer {
     ctx.lineTo(-6, 7);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
+  }
+
+  // === PARTICLE & EFFECTS SYSTEM ===
+
+  spawnBulletSparks(x, y) {
+    for (let i = 0; i < 5; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 50 + Math.random() * 100;
+      this.particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.2 + Math.random() * 0.15,
+        maxLife: 0.3,
+        color: `hsl(${40 + Math.random() * 20}, 100%, ${60 + Math.random() * 30}%)`,
+        size: 1 + Math.random() * 2
+      });
+    }
+  }
+
+  spawnDamageParticles(x, y) {
+    for (let i = 0; i < 6; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 30 + Math.random() * 80;
+      this.particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.3 + Math.random() * 0.3,
+        maxLife: 0.5,
+        color: '#ff3333',
+        size: 1.5 + Math.random() * 2
+      });
+    }
+  }
+
+  spawnMuzzleFlash(x, y) {
+    this.muzzleFlashes.push({ x, y, time: performance.now() });
+  }
+
+  addDamageNumber(x, y, damage) {
+    this.damageNumbers.push({
+      x: x + (Math.random() - 0.5) * 20,
+      y: y - 20,
+      text: `-${Math.round(damage)}`,
+      time: performance.now(),
+      color: '#ff4444'
+    });
+  }
+
+  showHitMarker() {
+    this.hitMarker = { time: performance.now() };
+  }
+
+  addDeathAnim(x, y, color, radius) {
+    this.deathAnims.push({ x, y, time: performance.now(), color, radius });
+  }
+
+  addFootstep(x, y) {
+    // Only add if far enough from last footstep
+    const last = this.footsteps[this.footsteps.length - 1];
+    if (last) {
+      const dx = x - last.x, dy = y - last.y;
+      if (dx * dx + dy * dy < 400) return; // ~20px apart
+    }
+    this.footsteps.push({ x, y, time: performance.now() });
+    if (this.footsteps.length > 60) this.footsteps.shift();
+  }
+
+  updateAndDrawParticles(cameraX, cameraY, dt, timestamp) {
+    const { ctx, canvas } = this;
+    const _s = this._currentScale || 1;
+
+    ctx.save();
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
+    ctx.scale(_s, _s);
+
+    // Update and draw particles
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      if (p.life <= 0) { this.particles.splice(i, 1); continue; }
+      const alpha = p.life / p.maxLife;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Footstep trails
+    const now = performance.now();
+    for (let i = this.footsteps.length - 1; i >= 0; i--) {
+      const f = this.footsteps[i];
+      const age = (now - f.time) / 1000;
+      if (age > 3) { this.footsteps.splice(i, 1); continue; }
+      const alpha = 0.15 * (1 - age / 3);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#888';
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Muzzle flashes
+    for (let i = this.muzzleFlashes.length - 1; i >= 0; i--) {
+      const mf = this.muzzleFlashes[i];
+      const age = now - mf.time;
+      if (age > 80) { this.muzzleFlashes.splice(i, 1); continue; }
+      const alpha = 1 - age / 80;
+      ctx.globalAlpha = alpha * 0.8;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(mf.x, mf.y, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffa';
+      ctx.beginPath();
+      ctx.arc(mf.x, mf.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Death animations
+    for (let i = this.deathAnims.length - 1; i >= 0; i--) {
+      const d = this.deathAnims[i];
+      const age = (now - d.time) / 1000;
+      if (age > 0.5) { this.deathAnims.splice(i, 1); continue; }
+      const t = age / 0.5;
+      const r = d.radius * (1 - t * 0.7);
+      ctx.globalAlpha = 1 - t;
+      ctx.fillStyle = d.color;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      // Expanding ring
+      ctx.strokeStyle = d.color;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = (1 - t) * 0.5;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.radius + d.radius * t, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+
+    // Damage numbers (screen-space)
+    ctx.save();
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
+    ctx.scale(_s, _s);
+    for (let i = this.damageNumbers.length - 1; i >= 0; i--) {
+      const dn = this.damageNumbers[i];
+      const age = (now - dn.time) / 1000;
+      if (age > 1) { this.damageNumbers.splice(i, 1); continue; }
+      const alpha = 1 - age;
+      const floatY = dn.y - age * 40;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = dn.color;
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(dn.text, dn.x, floatY);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Hit marker (screen center X)
+    if (this.hitMarker) {
+      const age = now - this.hitMarker.time;
+      if (age > 200) { this.hitMarker = null; }
+      else {
+        const alpha = 1 - age / 200;
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        const s = 8;
+        ctx.beginPath();
+        ctx.moveTo(cx - s, cy - s); ctx.lineTo(cx - s/3, cy - s/3);
+        ctx.moveTo(cx + s, cy - s); ctx.lineTo(cx + s/3, cy - s/3);
+        ctx.moveTo(cx - s, cy + s); ctx.lineTo(cx - s/3, cy + s/3);
+        ctx.moveTo(cx + s, cy + s); ctx.lineTo(cx + s/3, cy + s/3);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Ambient dust motes
+    this._updateDustMotes(cameraX, cameraY, dt, timestamp);
+  }
+
+  _updateDustMotes(cameraX, cameraY, dt, timestamp) {
+    const { ctx, canvas } = this;
+    const _s = this._currentScale || 1;
+
+    // Spawn new motes if needed
+    while (this.dustMotes.length < 20) {
+      this.dustMotes.push({
+        x: cameraX + (Math.random() - 0.5) * canvas.width / _s,
+        y: cameraY + (Math.random() - 0.5) * canvas.height / _s,
+        vx: (Math.random() - 0.5) * 10,
+        vy: (Math.random() - 0.5) * 8 - 3,
+        size: 0.5 + Math.random() * 1.5,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+
+    ctx.save();
+    ctx.translate(canvas.width / 2 - cameraX * _s + (this._shakeOffsetX||0), canvas.height / 2 - cameraY * _s + (this._shakeOffsetY||0));
+    ctx.scale(_s, _s);
+
+    for (let i = this.dustMotes.length - 1; i >= 0; i--) {
+      const m = this.dustMotes[i];
+      m.x += m.vx * dt + Math.sin(timestamp / 2000 + m.phase) * 0.3;
+      m.y += m.vy * dt;
+
+      // Remove if too far from camera
+      if (Math.abs(m.x - cameraX) > canvas.width / _s ||
+          Math.abs(m.y - cameraY) > canvas.height / _s) {
+        this.dustMotes.splice(i, 1);
+        continue;
+      }
+
+      const alpha = 0.15 + 0.1 * Math.sin(timestamp / 1000 + m.phase);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#aaa';
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 

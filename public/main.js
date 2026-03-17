@@ -241,11 +241,46 @@ socket.on('gameState', (state) => {
         }
       }
     }
-    // Track sniper tracer trails
-    const oldBullets = new Map(gameState.bullets.filter(b => b.type === 'sniper').map(b => [b.id, b]));
-    for (const [id, old] of oldBullets) {
+    // Track bullet removals for sparks and tracers
+    const oldBulletMap = new Map(gameState.bullets.map(b => [b.id, b]));
+    for (const [id, old] of oldBulletMap) {
       if (!state.bullets.find(b => b.id === id)) {
-        tracerTrails.push({ originX: old.originX, originY: old.originY, endX: old.x, endY: old.y, startTime: performance.now() });
+        // Bullet disappeared — spawn sparks at last position
+        renderer.spawnBulletSparks(old.x, old.y);
+        // Sniper tracer trail
+        if (old.type === 'sniper' && old.originX != null) {
+          tracerTrails.push({ originX: old.originX, originY: old.originY, endX: old.x, endY: old.y, startTime: performance.now() });
+        }
+      }
+    }
+
+    // Detect new bullets for muzzle flash
+    for (const b of state.bullets) {
+      if (!oldBulletMap.has(b.id) && b.type !== 'shrapnel') {
+        const owner = gameState.players.find(p => p.id === b.ownerId);
+        if (owner) {
+          renderer.spawnMuzzleFlash(owner.x + Math.cos(owner.angle) * 24, owner.y + Math.sin(owner.angle) * 24);
+        }
+      }
+    }
+
+    // Detect player health changes for damage particles/numbers
+    for (const newP of state.players) {
+      const oldP = gameState.players.find(p => p.id === newP.id);
+      if (oldP && newP.health < oldP.health) {
+        const dmg = oldP.health - newP.health;
+        renderer.spawnDamageParticles(newP.x, newP.y);
+        renderer.addDamageNumber(newP.x, newP.y, dmg);
+        // If this is someone WE hit, show hit marker
+        if (newP.id !== myId) {
+          renderer.showHitMarker();
+        }
+      }
+      // Detect deaths for death animation
+      if (oldP && oldP.alive && !newP.alive) {
+        const idx = state.players.indexOf(newP);
+        const color = getPlayerColor(newP, idx);
+        renderer.addDeathAnim(newP.x, newP.y, color, 18);
       }
     }
   }
@@ -783,6 +818,10 @@ function loop(timestamp) {
 
       // Shadow overlay ON TOP of entities — covers hidden parts but leaves visible edges
       renderer.drawShadowAndWalls();
+
+      // Particles and effects (drawn above shadow)
+      renderer.addFootstep(viewX, viewY);
+      renderer.updateAndDrawParticles(viewX, viewY, dt, timestamp);
 
       // Local player drawn ABOVE shadow (always fully visible)
       ctx.save();
