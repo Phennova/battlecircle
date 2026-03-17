@@ -22,6 +22,12 @@ export class Renderer {
 
     const scale = cameraScale || 1;
     this._currentScale = scale;
+    this._lastVisionRange = visionRange;
+    this._lastVisibility = visibilityPolygon;
+    this._lastCameraX = cameraX;
+    this._lastCameraY = cameraY;
+    this._lastDestroyed = destroyedWalls;
+
     const offsetX = canvas.width / 2 - cameraX * scale;
     const offsetY = canvas.height / 2 - cameraY * scale;
 
@@ -40,13 +46,26 @@ export class Renderer {
     }
 
     ctx.restore();
+  }
 
-    // Shadow overlay (screen-space)
+  // Call AFTER drawing all entities to overlay shadow on top
+  drawShadowAndWalls() {
+    const { ctx, canvas } = this;
+    const visibilityPolygon = this._lastVisibility;
+    const cameraX = this._lastCameraX;
+    const cameraY = this._lastCameraY;
+    const scale = this._currentScale || 1;
+    const visionRange = this._lastVisionRange;
+    const destroyedWalls = this._lastDestroyed;
+
+    // Shadow overlay on top of entities
     if (visibilityPolygon) {
       this.drawShadow(visibilityPolygon, cameraX, cameraY, scale, visionRange);
     }
 
-    // Walls drawn ABOVE shadow so always visible
+    // Walls on top of shadow
+    const offsetX = canvas.width / 2 - cameraX * scale;
+    const offsetY = canvas.height / 2 - cameraY * scale;
     ctx.save();
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
@@ -57,13 +76,11 @@ export class Renderer {
       const w = this.allWalls[wi];
       ctx.fillRect(w.x, w.y, w.w, w.h);
     }
-    // Draw rubble at destroyed wall positions
     if (destroyed.size > 0) {
       ctx.fillStyle = '#443322';
       for (const idx of destroyed) {
         if (idx < this.allWalls.length) {
           const w = this.allWalls[idx];
-          // Scattered rubble dots
           for (let r = 0; r < 6; r++) {
             const rx = w.x + Math.random() * w.w;
             const ry = w.y + Math.random() * w.h;

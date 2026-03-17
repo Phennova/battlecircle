@@ -714,29 +714,20 @@ function loop(timestamp) {
         renderer.drawFlagZones(gameState.flags, viewX, viewY, timestamp);
       }
 
-      // Ground items
-      const visibleItems = gameState.groundItems.filter(item =>
-        shadowCaster.isVisible(item.x, item.y, visibility)
-      );
-      renderer.drawGroundItems(visibleItems, viewX, viewY, timestamp);
+      // Ground items (all — shadow overlay will hide what's in shadow)
+      renderer.drawGroundItems(gameState.groundItems, viewX, viewY, timestamp);
 
       // Bullets (interpolated for smooth motion)
       const interpBullets = getInterpolatedBullets(gameState.bullets);
-      const visibleBullets = interpBullets.filter(b =>
-        shadowCaster.isVisible(b.x, b.y, visibility)
-      );
-      renderer.drawBullets(visibleBullets, viewX, viewY);
+      renderer.drawBullets(interpBullets, viewX, viewY);
 
       // Tracers
-      renderer.drawTracers(visibleBullets, tracerTrails, viewX, viewY, performance.now());
+      renderer.drawTracers(interpBullets, tracerTrails, viewX, viewY, performance.now());
 
       // Grenades
-      const visibleGrenades = gameState.grenades.filter(g =>
-        shadowCaster.isVisible(g.x, g.y, visibility)
-      );
-      renderer.drawGrenades(visibleGrenades, viewX, viewY, timestamp);
+      renderer.drawGrenades(gameState.grenades, viewX, viewY, timestamp);
 
-      // Players
+      // Other players (all alive — shadow covers hidden parts)
       ctx.save();
       ctx.translate(canvas.width / 2 - viewX * cameraScale, canvas.height / 2 - viewY * cameraScale);
       ctx.scale(cameraScale, cameraScale);
@@ -745,20 +736,27 @@ function loop(timestamp) {
       gameState.players.forEach((p, i) => {
         if (p.id === myId || !p.alive) return;
         const interp = getInterpolatedPlayer(p.id);
-        if (shadowCaster.isVisible(interp.x, interp.y, visibility)) {
-          const otherGunType = interp.gun ? interp.gun.type : null;
-          renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, getPlayerColor(p || interp, i), interp.health, PLAYER_HP, otherGunType, interp.name);
-          // CTF carrier glow
-          if (gameState.flags) {
-            for (const flag of gameState.flags) {
-              if (flag.state === 'carried' && flag.carrierId === p.id) {
-                renderer.drawCarrierGlow(interp.x, interp.y, PLAYER_RADIUS, timestamp);
-              }
+        const otherGunType = interp.gun ? interp.gun.type : null;
+        renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, getPlayerColor(p || interp, i), interp.health, PLAYER_HP, otherGunType, interp.name);
+        // CTF carrier glow
+        if (gameState.flags) {
+          for (const flag of gameState.flags) {
+            if (flag.state === 'carried' && flag.carrierId === p.id) {
+              renderer.drawCarrierGlow(interp.x, interp.y, PLAYER_RADIUS, timestamp);
             }
           }
         }
       });
 
+      ctx.restore();
+
+      // Shadow overlay ON TOP of entities — covers hidden parts but leaves visible edges
+      renderer.drawShadowAndWalls();
+
+      // Local player drawn ABOVE shadow (always fully visible)
+      ctx.save();
+      ctx.translate(canvas.width / 2 - viewX * cameraScale, canvas.height / 2 - viewY * cameraScale);
+      ctx.scale(cameraScale, cameraScale);
       const myGunType = me.gun ? me.gun.type : null;
       renderer.drawPlayer(viewX, viewY, inp.angle, PLAYER_RADIUS, getPlayerColor(me, playerIndex), me.health, PLAYER_HP, myGunType, me.name);
       // CTF carrier glow for local player
@@ -769,7 +767,6 @@ function loop(timestamp) {
           }
         }
       }
-
       ctx.restore();
 
       // Doors
@@ -844,30 +841,27 @@ function loop(timestamp) {
         const visibility = shadowCaster.computeVisibility(viewX, viewY, isInSmoke ? 40 : 600);
         shadowCaster.removeSmokeBlockers();
 
-        renderer.draw(viewX, viewY, visibility, 1, gameState.destroyedWalls);
+        renderer.draw(viewX, viewY, visibility, 1, gameState.destroyedWalls, isInSmoke ? 40 : 600);
 
-        const visibleItems = gameState.groundItems.filter(item => shadowCaster.isVisible(item.x, item.y, visibility));
-        renderer.drawGroundItems(visibleItems, viewX, viewY, timestamp);
+        renderer.drawGroundItems(gameState.groundItems, viewX, viewY, timestamp);
 
         const interpBullets = getInterpolatedBullets(gameState.bullets);
-        const visibleBullets = interpBullets.filter(b => shadowCaster.isVisible(b.x, b.y, visibility));
-        renderer.drawBullets(visibleBullets, viewX, viewY);
-        renderer.drawTracers(visibleBullets, tracerTrails, viewX, viewY, performance.now());
+        renderer.drawBullets(interpBullets, viewX, viewY);
+        renderer.drawTracers(interpBullets, tracerTrails, viewX, viewY, performance.now());
 
-        const visibleGrenades = gameState.grenades.filter(g => shadowCaster.isVisible(g.x, g.y, visibility));
-        renderer.drawGrenades(visibleGrenades, viewX, viewY, timestamp);
+        renderer.drawGrenades(gameState.grenades, viewX, viewY, timestamp);
 
         ctx.save();
         ctx.translate(canvas.width / 2 - viewX, canvas.height / 2 - viewY);
         gameState.players.forEach((p, i) => {
           if (!p.alive) return;
           const interp = getInterpolatedPlayer(p.id);
-          if (shadowCaster.isVisible(interp.x, interp.y, visibility)) {
-            const gunType = interp.gun ? interp.gun.type : null;
-            renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, getPlayerColor(p || interp, i), interp.health, PLAYER_HP, gunType, interp.name);
-          }
+          const gunType = interp.gun ? interp.gun.type : null;
+          renderer.drawPlayer(interp.x, interp.y, interp.angle, PLAYER_RADIUS, getPlayerColor(p || interp, i), interp.health, PLAYER_HP, gunType, interp.name);
         });
         ctx.restore();
+
+        renderer.drawShadowAndWalls();
 
         if (gameState.doors) renderer.drawDoors(gameState.doors, viewX, viewY, timestamp);
         renderer.drawZone(gameState.zone, viewX, viewY, timestamp);
