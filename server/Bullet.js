@@ -4,13 +4,14 @@ export class Bullet {
   constructor(ownerId, x, y, angle, weapon, ownerVx, ownerVy) {
     this.id = `b${nextBulletId++}`;
     this.ownerId = ownerId;
+    this.startX = x;
+    this.startY = y;
     this.x = x;
     this.y = y;
     this.angle = angle;
     this.damage = weapon.damage;
     this.range = weapon.range;
     this.type = weapon.name.toLowerCase();
-    this.distanceTraveled = 0;
     this.alive = true;
 
     // Add player velocity to bullet velocity
@@ -24,8 +25,11 @@ export class Bullet {
   update(dt) {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
-    this.distanceTraveled += this.speed * dt;
-    if (this.distanceTraveled >= this.range) {
+    // Range based on actual distance from spawn point, not accumulated speed
+    const dx = this.x - this.startX;
+    const dy = this.y - this.startY;
+    const distFromStart = Math.sqrt(dx * dx + dy * dy);
+    if (distFromStart >= this.range) {
       this.alive = false;
     }
   }
