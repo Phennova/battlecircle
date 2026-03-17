@@ -447,16 +447,16 @@ function sendInput(inp) {
 
 // Bullet interpolation — extrapolate bullet positions based on their angle and speed
 function getInterpolatedBullets(bullets) {
-  // Extrapolate bullets forward for smooth rendering, but cap at half a tick
-  // to avoid overshooting past where the server will detect a hit
+  // Extrapolate bullets forward using actual velocity, cap at half a tick
   const elapsed = Math.min((performance.now() - snapshotTime) / 1000, 0.025);
-  const BULLET_SPEEDS = { pistol: 500, shotgun: 450, rifle: 1200, smg: 600, sniper: 1800, shrapnel: 400 };
   return bullets.map(b => {
-    const speed = BULLET_SPEEDS[b.type] || 600;
+    // Use server-provided velocity if available, fall back to angle-based
+    const vx = b.vx != null ? b.vx : Math.cos(b.angle) * 600;
+    const vy = b.vy != null ? b.vy : Math.sin(b.angle) * 600;
     return {
       ...b,
-      x: b.x + Math.cos(b.angle) * speed * elapsed,
-      y: b.y + Math.sin(b.angle) * speed * elapsed
+      x: b.x + vx * elapsed,
+      y: b.y + vy * elapsed
     };
   });
 }

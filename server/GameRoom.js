@@ -237,7 +237,16 @@ export class GameRoom {
       p.lastShotTime = now;
       p.gun.magAmmo--;
 
-      const bullet = new Bullet(p.id, p.x, p.y, data.angle || p.angle, weapon);
+      // Player velocity for bullet inheritance
+      const sinp = p.input;
+      let sdx = (sinp.right ? 1 : 0) - (sinp.left ? 1 : 0);
+      let sdy = (sinp.down ? 1 : 0) - (sinp.up ? 1 : 0);
+      if (sdx !== 0 && sdy !== 0) { const l = Math.sqrt(sdx*sdx+sdy*sdy); sdx/=l; sdy/=l; }
+      const sniperSpeedMult = sinp.scoping ? 0.4 : 1.0;
+      const svx = sdx * p.speed * sniperSpeedMult;
+      const svy = sdy * p.speed * sniperSpeedMult;
+
+      const bullet = new Bullet(p.id, p.x, p.y, data.angle || p.angle, weapon, svx, svy);
       bullet.originX = p.x;
       bullet.originY = p.y;
       this.bullets.push(bullet);
@@ -698,17 +707,29 @@ export class GameRoom {
       player.lastShotTime = now;
       player.gun.magAmmo--;
 
+      // Calculate player velocity for bullet inheritance
+      const inp = player.input;
+      let pdx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+      let pdy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+      if (pdx !== 0 && pdy !== 0) {
+        const len = Math.sqrt(pdx * pdx + pdy * pdy);
+        pdx /= len;
+        pdy /= len;
+      }
+      const isScoping = inp.scoping && player.gun.type === 'sniper';
+      const sMult = (player.healing || player.reloading) ? 0.3 : isScoping ? 0.4 : 1.0;
+      const ownerVx = pdx * player.speed * sMult;
+      const ownerVy = pdy * player.speed * sMult;
+
       for (let i = 0; i < weapon.pellets; i++) {
         let angle = player.angle;
         if (weapon.pellets > 1) {
-          // Shotgun: evenly distributed spread
           const step = (weapon.spread * 2) / (weapon.pellets - 1);
           angle = player.angle - weapon.spread + step * i;
         } else if (weapon.spread > 0) {
-          // SMG: random spread per bullet
           angle += (Math.random() - 0.5) * 2 * weapon.spread;
         }
-        this.bullets.push(new Bullet(player.id, player.x, player.y, angle, weapon));
+        this.bullets.push(new Bullet(player.id, player.x, player.y, angle, weapon, ownerVx, ownerVy));
       }
     });
 
@@ -819,8 +840,10 @@ export class GameRoom {
         for (let s = 0; s < SHRAPNEL_COUNT; s++) {
           const angle = Math.random() * Math.PI * 2;
           const speed = 250 + Math.random() * 300; // 250-550 px/s (varied for stagger)
-          const piece = new Bullet(gren.ownerId, gren.x, gren.y, angle, shrapnelWeapon);
+          const piece = new Bullet(gren.ownerId, gren.x, gren.y, angle, shrapnelWeapon, 0, 0);
           piece.speed = speed;
+          piece.vx = Math.cos(angle) * speed;
+          piece.vy = Math.sin(angle) * speed;
           piece.type = 'shrapnel';
           // Slight random offset from center so they don't all start at exact same point
           piece.x += (Math.random() - 0.5) * 6;
@@ -915,7 +938,7 @@ export class GameRoom {
       lastProcessedInput,
       players,
       bullets: this.bullets.map(b => ({
-        id: b.id, x: b.x, y: b.y, angle: b.angle, type: b.type, ownerId: b.ownerId,
+        id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, angle: b.angle, type: b.type, ownerId: b.ownerId,
         originX: b.originX, originY: b.originY
       })),
       grenades: this.grenades.map(g => ({ id: g.id, x: g.x, y: g.y, explodeAt: g.explodeAt, type: g.type })),
