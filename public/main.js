@@ -681,10 +681,20 @@ function loop(timestamp) {
       // Sniper scope vision
       let currentVisionRange = 600;
       if (isSniper && inputHandler.scopeStartTime) {
+        // Actively scoping
         const holdTime = performance.now() - inputHandler.scopeStartTime;
         const scopeProgress = Math.min(1, holdTime / 300);
         currentVisionRange = 600 + (1000 - 600) * scopeProgress;
         isScoping = true;
+      } else if (isSniper && lastSniperFireTime > 0) {
+        // After shot: keep extended vision during linger, then ease back
+        const sinceShot = performance.now() - lastSniperFireTime;
+        const lingerDuration = 1000;
+        if (sinceShot < lingerDuration) {
+          const t = sinceShot / lingerDuration;
+          const eased = t * t;
+          currentVisionRange = 600 + (1000 - 600) * (1 - eased);
+        }
       }
 
       // Smoke vision check
