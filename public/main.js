@@ -148,12 +148,12 @@ socket.on('lobbyUpdate', (data) => {
       const borderC = color === 'blue' ? 'rgba(74,158,255,0.15)' : 'rgba(255,107,107,0.15)';
       return `
         <div style="flex:1;border:1px solid ${borderC};background:${bg};padding:16px;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px))">
-          <div style="font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:3px;color:${accent};margin-bottom:10px;text-transform:uppercase">${label}</div>
-          <button onclick="window._joinTeam(${teamIdx})" style="width:100%;padding:6px;background:transparent;border:1px solid ${accent};color:${accent};cursor:pointer;font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px;margin-bottom:10px;transition:background 0.2s;text-transform:uppercase"
+          <div style="font-family:Orbitron,sans-serif;font-size:11px;letter-spacing:3px;color:${accent};margin-bottom:10px;text-transform:uppercase">${label}</div>
+          <button onclick="window._joinTeam(${teamIdx})" style="width:100%;padding:6px;background:transparent;border:1px solid ${accent};color:${accent};cursor:pointer;font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:2px;margin-bottom:10px;transition:background 0.2s;text-transform:uppercase"
             onmouseover="this.style.background='${bg}'" onmouseout="this.style.background='transparent'">Join</button>
           ${players.map(p => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;margin:3px 0;border-left:2px solid ${p.ready ? '#50c878' : accent};background:rgba(255,255,255,0.02)">
-              <span style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:500;color:${accent}">${p.name}</span>
+              <span style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:500;color:${accent}">${p.name}</span>
               ${p.ready ? '<span style="font-family:\'Orbitron\',sans-serif;font-size:9px;color:#50c878;letter-spacing:1px">READY</span>' : ''}
             </div>`).join('')}
         </div>`;
@@ -164,14 +164,14 @@ socket.on('lobbyUpdate', (data) => {
         ${teamCard('blue', 'Blue Team', blue, 0)}
         ${teamCard('red', 'Red Team', red, 1)}
       </div>
-      ${unassigned.length > 0 ? `<div style="color:#5a6480;font-size:12px;text-align:center;font-family:'Rajdhani',sans-serif;letter-spacing:1px;margin-top:8px">${unassigned.map(p => p.name).join(', ')} - select a team</div>` : ''}
+      ${unassigned.length > 0 ? `<div style="color:#5a6480;font-size:12px;text-align:center;font-family:Rajdhani,sans-serif;letter-spacing:1px;margin-top:8px">${unassigned.map(p => p.name).join(', ')} - select a team</div>` : ''}
     `;
   } else {
     playerList.innerHTML = data.players.map(p =>
       `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;margin:3px 0;border-left:2px solid ${p.ready ? '#50c878' : 'rgba(74,158,255,0.2)'};background:rgba(255,255,255,0.02);transition:background 0.15s"
         onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'">
-        <span style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;color:#e0e6f0">${p.name}</span>
-        <span style="font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:1px;color:${p.ready ? '#50c878' : '#333a50'}">${p.ready ? 'READY' : 'WAITING'}</span>
+        <span style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:500;color:#e0e6f0">${p.name}</span>
+        <span style="font-family:Orbitron,sans-serif;font-size:9px;letter-spacing:1px;color:${p.ready ? '#50c878' : '#333a50'}">${p.ready ? 'READY' : 'WAITING'}</span>
       </div>`
     ).join('');
   }
@@ -202,7 +202,7 @@ socket.on('countdown', (data) => {
     const overlay = document.getElementById('overlay');
     overlay.style.display = 'flex';
     overlay.innerHTML = `
-      <h1 style="font-size:36px;color:#fff;margin-bottom:8px">Choose Your Class</h1>
+      <h1 style="font-family:Orbitron,sans-serif;font-size:24px;color:#e0e6f0;margin-bottom:8px;letter-spacing:4px">CHOOSE YOUR CLASS</h1>
       <p style="color:#888;margin-bottom:16px">Game starting soon...</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
         <button onclick="window._selectClass('rusher')" style="padding:12px 18px;background:rgba(232,226,46,0.15);border:1px solid #e8e82e;color:#e8e82e;border-radius:6px;cursor:pointer;font-size:14px">
@@ -348,7 +348,7 @@ socket.on('playerKilled', (data) => {
       const kills = myData ? myData.kills : 0;
       const sec = Math.floor(survivalMs / 1000);
       overlay.innerHTML = `
-        <h1 style="font-size:48px;color:#ff4444;letter-spacing:4px">ELIMINATED</h1>
+        <h1 style="font-family:Orbitron,sans-serif;font-size:42px;color:#ff6b4a;letter-spacing:6px">ELIMINATED</h1>
         <p style="color:#aaa;margin:8px">Survived: ${Math.floor(sec/60)}m ${sec%60}s</p>
         <p style="color:#aaa;margin:8px">Kills: ${kills}</p>
       `;
@@ -382,17 +382,17 @@ socket.on('gameOver', (data) => {
     const won = myTeam === data.winningTeam;
     const teamColor = data.winningTeam === 'blue' ? '#4a9eff' : '#ff6b6b';
     title = won
-      ? `<h1 style="font-size:48px;color:#ffc832;letter-spacing:4px;margin-bottom:8px">VICTORY</h1>
+      ? `<h1 style="font-family:Orbitron,sans-serif;font-size:42px;color:#ffc832;letter-spacing:6px;margin-bottom:8px">VICTORY</h1>
          <div style="color:${teamColor};font-size:18px;margin-bottom:8px">${data.winningTeam.toUpperCase()} TEAM WINS</div>
          <div style="color:#888;font-size:16px;margin-bottom:16px">${data.teamScores[0]} - ${data.teamScores[1]}</div>`
-      : `<h1 style="font-size:36px;color:#ff4444;letter-spacing:4px;margin-bottom:8px">DEFEAT</h1>
+      : `<h1 style="font-family:Orbitron,sans-serif;font-size:32px;color:#ff6b4a;letter-spacing:5px;margin-bottom:8px">DEFEAT</h1>
          <div style="color:${teamColor};font-size:18px;margin-bottom:8px">${data.winningTeam.toUpperCase()} TEAM WINS</div>
          <div style="color:#888;font-size:16px;margin-bottom:16px">${data.teamScores[0]} - ${data.teamScores[1]}</div>`;
   } else {
     const isWinner = data.winnerId === myId;
     title = isWinner
-      ? '<h1 style="font-size:48px;color:#ffc832;letter-spacing:4px;margin-bottom:16px">VICTORY</h1>'
-      : '<h1 style="font-size:36px;color:#ff4444;letter-spacing:4px;margin-bottom:16px">GAME OVER</h1>';
+      ? '<h1 style="font-family:Orbitron,sans-serif;font-size:42px;color:#ffc832;letter-spacing:6px;margin-bottom:16px">VICTORY</h1>'
+      : '<h1 style="font-family:Orbitron,sans-serif;font-size:32px;color:#ff6b4a;letter-spacing:5px;margin-bottom:16px">GAME OVER</h1>';
   }
 
   let leaderboardHTML = '';
@@ -416,7 +416,7 @@ socket.on('gameOver', (data) => {
     }).join('');
 
     leaderboardHTML = `
-      <table style="border-collapse:collapse;margin:16px 0;font-size:13px;font-family:sans-serif;min-width:360px">
+      <table style="border-collapse:collapse;margin:16px 0;font-size:13px;font-family:Rajdhani,sans-serif;min-width:360px">
         <thead>
           <tr style="border-bottom:1px solid #444">
             ${hasPlacements ? '<th style="padding:6px 12px;color:#888;text-align:left">#</th>' : ''}
@@ -434,7 +434,7 @@ socket.on('gameOver', (data) => {
   overlay.innerHTML = `
     ${title}
     ${leaderboardHTML}
-    <button onclick="location.reload()" style="margin-top:12px;padding:12px 32px;font-size:18px;background:#4a9eff;color:#fff;border:none;border-radius:8px;cursor:pointer">Play Again</button>
+    <button onclick="location.reload()" style="margin-top:12px;padding:14px 40px;font-family:Orbitron,sans-serif;font-size:12px;letter-spacing:3px;background:transparent;color:#4a9eff;border:2px solid rgba(74,158,255,0.4);cursor:pointer;text-transform:uppercase">Play Again</button>
   `;
 });
 
@@ -518,13 +518,13 @@ function loop(timestamp) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (remaining > 0) {
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 72px sans-serif';
+      ctx.font = "900 72px 'Orbitron', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(remaining.toString(), canvas.width / 2, canvas.height / 2);
     } else {
       ctx.fillStyle = '#888';
-      ctx.font = '24px sans-serif';
+      ctx.font = "400 18px 'Orbitron', sans-serif";
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('Starting...', canvas.width / 2, canvas.height / 2);
@@ -971,7 +971,7 @@ function loop(timestamp) {
           const overlay = document.getElementById('overlay');
           overlay.style.display = 'flex';
           overlay.innerHTML = `<h1 style="font-size:36px;color:#ff4444">ELIMINATED</h1>
-            <button onclick="location.reload()" style="margin-top:20px;padding:12px 32px;font-size:18px;background:#4a9eff;color:#fff;border:none;border-radius:8px;cursor:pointer">Play Again</button>`;
+            <button onclick="location.reload()" style="margin-top:20px;padding:14px 40px;font-family:Orbitron,sans-serif;font-size:12px;letter-spacing:3px;background:transparent;color:#4a9eff;border:2px solid rgba(74,158,255,0.4);cursor:pointer;text-transform:uppercase">Play Again</button>`;
         }
       }
     }
