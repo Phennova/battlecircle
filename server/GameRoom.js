@@ -21,9 +21,9 @@ const LOOT_TABLE = [
   { type: 'smoke', slot: 'grenade', weight: 8 },
   { type: 'bandage', slot: 'heal', weight: 12 },
   { type: 'medkit', slot: 'heal', weight: 6 },
-  { type: 'light_ammo', slot: 'ammo', ammoType: 'light', weight: 14 },
-  { type: 'shells_ammo', slot: 'ammo', ammoType: 'shells', weight: 12 },
-  { type: 'heavy_ammo', slot: 'ammo', ammoType: 'heavy', weight: 12 },
+  { type: 'light_ammo', slot: 'ammo', ammoType: 'light', weight: 18 },
+  { type: 'shells_ammo', slot: 'ammo', ammoType: 'shells', weight: 16 },
+  { type: 'heavy_ammo', slot: 'ammo', ammoType: 'heavy', weight: 16 },
 ];
 
 const ITEMS_PER_SLOT = 2;
@@ -522,6 +522,39 @@ export class GameRoom {
           this.groundItems.push(item);
         }
       }
+    }
+
+    // Spawn ammo near standalone barricades (walls beyond boundary walls)
+    const AMMO_ITEMS = [
+      { type: 'light_ammo', slot: 'ammo', ammoType: 'light' },
+      { type: 'shells_ammo', slot: 'ammo', ammoType: 'shells' },
+      { type: 'heavy_ammo', slot: 'ammo', ammoType: 'heavy' },
+    ];
+    const barriers = this.map.walls.slice(4); // skip 4 boundary walls
+    for (const wall of barriers) {
+      // 70% chance to spawn ammo near each barrier
+      if (Math.random() > 0.7) continue;
+      const ammoType = AMMO_ITEMS[Math.floor(Math.random() * AMMO_ITEMS.length)];
+      // Place behind/beside the barrier
+      let ax, ay;
+      if (wall.h <= 12) {
+        // Horizontal barrier — spawn above or below
+        ax = wall.x + Math.random() * wall.w;
+        ay = wall.y + (Math.random() < 0.5 ? -20 : wall.h + 20);
+      } else {
+        // Vertical barrier — spawn left or right
+        ax = wall.x + (Math.random() < 0.5 ? -20 : wall.w + 20);
+        ay = wall.y + Math.random() * wall.h;
+      }
+      this.groundItems.push({
+        id: `item_${nextItemId++}`,
+        type: ammoType.type,
+        slot: 'ammo',
+        ammoType: ammoType.ammoType,
+        amount: AMMO_TYPES[ammoType.ammoType].perPickup,
+        x: ax,
+        y: ay
+      });
     }
   }
 
