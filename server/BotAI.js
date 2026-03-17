@@ -351,6 +351,12 @@ export class BotAI {
     const bot = this.bot;
     const navGrid = this.room.navGrid;
 
+    // If stuck recovery just set an escape direction, don't override it
+    if (this._escaping) {
+      this._escaping = false;
+      return;
+    }
+
     // If bot is on a blocked cell, override goal to nearest walkable cell
     if (navGrid) {
       const myCell = navGrid.worldToCell(bot.x, bot.y);
@@ -443,7 +449,7 @@ export class BotAI {
 
     // Stuck detection — fast response
     const movedDist = Math.sqrt((bot.x - this.lastPos.x) ** 2 + (bot.y - this.lastPos.y) ** 2);
-    if (movedDist < 1) {
+    if (movedDist < 3) { // catch oscillation (1-2px jitter)
       this.stuckTimer += dt;
       this.stuckCount = (this.stuckCount || 0);
 
@@ -467,6 +473,9 @@ export class BotAI {
           bot._lootPatrolGoal = { x: centerX, y: centerY };
           bot._huntGoal = { x: centerX, y: centerY };
         }
+
+        // Skip navigation this tick so escape direction isn't overwritten
+        this._escaping = true;
 
         // Cycle through all 8 directions systematically
         const escapeDir = this.stuckCount % 8;
