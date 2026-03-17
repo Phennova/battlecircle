@@ -118,7 +118,23 @@ function fleeAndFindHeals(bot, ctx) {
 function lootWeaponUnarmed(bot, ctx) {
   if (bot.gun) return { score: 0 };
   const weaponItem = findNearestItem(bot, ctx.visibleItems, ['pistol', 'shotgun', 'rifle', 'smg', 'sniper']);
-  if (!weaponItem) return { score: 95, type: 'patrol_for_loot' }; // still high priority, wander to find one
+  if (!weaponItem) {
+    // No weapon visible — wander toward buildings to find one
+    if (!bot._lootPatrolGoal || distSq(bot, bot._lootPatrolGoal) < 3600) {
+      // Pick a random building to search
+      const buildings = ctx.buildings || [];
+      if (buildings.length > 0) {
+        const b = buildings[Math.floor(Math.random() * buildings.length)];
+        bot._lootPatrolGoal = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+      } else {
+        bot._lootPatrolGoal = {
+          x: 200 + Math.random() * (ctx.map.width - 400),
+          y: 200 + Math.random() * (ctx.map.height - 400)
+        };
+      }
+    }
+    return { score: 95, type: 'patrol_for_loot', goalX: bot._lootPatrolGoal.x, goalY: bot._lootPatrolGoal.y };
+  }
 
   return {
     score: 95,

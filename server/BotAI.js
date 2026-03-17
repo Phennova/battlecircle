@@ -5,6 +5,7 @@
  * picks the highest priority, and translates the action into player input.
  */
 
+import { writeFileSync, appendFileSync } from 'fs';
 import { createBehaviors } from './BotBehaviors.js';
 import {
   assessThreats, decideEngagement, calculateAim,
@@ -72,13 +73,39 @@ export class BotAI {
     // Score all behaviors and pick the best
     let bestScore = -1;
     let bestAction = null;
+    const allScores = [];
 
     for (const behavior of this.behaviors) {
       const result = behavior(bot, ctx);
+      if (result.score > 0) {
+        allScores.push({ name: behavior.name, score: result.score, type: result.type });
+      }
       if (result.score > bestScore) {
         bestScore = result.score;
         bestAction = result;
       }
+    }
+
+    // Debug logging (throttled to once per second per bot)
+    if (!this._lastLogTime || Date.now() - this._lastLogTime > 1000) {
+      this._lastLogTime = Date.now();
+      const top3 = allScores.sort((a, b) => b.score - a.score).slice(0, 3);
+      const hasGun = bot.gun ? `${bot.gun.type}(${bot.gun.magAmmo})` : 'UNARMED';
+      const hp = Math.round(bot.health);
+      const enemies = ctx.visibleEnemies.length;
+      const items = ctx.visibleItems.length;
+      const pathLen = this.currentPath.length;
+      const goal = bestAction ? `${bestAction.type}` : 'none';
+      const goalPos = bestAction?.goalX ? `(${Math.round(bestAction.goalX)},${Math.round(bestAction.goalY)})` : '';
+
+      const logLine = `[BOT ${bot.name}] HP:${hp} Gun:${hasGun} ` +
+        `Enemies:${enemies} Items:${items} Path:${pathLen} ` +
+        `Action:${goal}${goalPos} ` +
+        `Scores:[${top3.map(s => `${s.name}:${s.score}`).join(', ')}] ` +
+        `Pos:(${Math.round(bot.x)},${Math.round(bot.y)}) ` +
+        `Input:${bot.input.up?'U':''}${bot.input.down?'D':''}${bot.input.left?'L':''}${bot.input.right?'R':''}${bot.input.shooting?'S':''}`;
+      console.log(logLine);
+      try { appendFileSync('/Users/soren/Desktop/Battleroyale/bot_debug.log', logLine + '\n'); } catch(e) {}
     }
 
     // Execute the chosen action
@@ -194,6 +221,7 @@ export class BotAI {
     switch (action.type) {
       case 'move':
       case 'move_and_pickup':
+      case 'patrol_for_loot':
       case 'patrol_for_loot':
         this._navigateTo(action.goalX, action.goalY, ctx, dt);
         // Auto-pickup when near items
@@ -332,7 +360,7 @@ export class BotAI {
       this.pathRecalcTimer = 0.5;
     }
 
-    // Follow the path
+    // Follow the path — if empty, move directly toward goal (fallback)
     let targetX = goalX;
     let targetY = goalY;
 

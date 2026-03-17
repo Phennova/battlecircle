@@ -22,7 +22,7 @@ export class NavGrid {
    */
   buildFromWalls(walls) {
     this.grid.fill(0);
-    const margin = 14; // player radius - a bit of slack
+    const margin = 8; // smaller than player radius to avoid blocking spawn points
 
     for (const wall of walls) {
       const minCol = Math.max(0, Math.floor((wall.x - margin) / CELL_SIZE));
