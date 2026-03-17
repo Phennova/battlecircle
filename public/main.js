@@ -828,6 +828,10 @@ function loop(timestamp) {
       ctx.translate(canvas.width / 2 - viewX * cameraScale + (renderer._shakeOffsetX||0), canvas.height / 2 - viewY * cameraScale + (renderer._shakeOffsetY||0));
       ctx.scale(cameraScale, cameraScale);
       const myGunType = me.gun ? me.gun.type : null;
+      // Weapon range preview
+      if (me.gun && WEAPONS[me.gun.type]) {
+        renderer.drawWeaponRange(ctx, viewX, viewY, inp.angle, WEAPONS[me.gun.type], cameraScale);
+      }
       renderer.drawPlayer(viewX, viewY, inp.angle, PLAYER_RADIUS, getPlayerColor(me, playerIndex), me.health, PLAYER_HP, myGunType, me.name);
       // CTF carrier glow for local player
       if (gameState.flags) {

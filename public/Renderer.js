@@ -1280,6 +1280,136 @@ export class Renderer {
     ctx.restore();
   }
 
+  drawWeaponRange(ctx, x, y, angle, weapon, cameraScale) {
+    if (!weapon || weapon.name === 'Sniper') return;
+    const _s = cameraScale || 1;
+    const range = weapon.range;
+    const color = weapon.color;
+
+    ctx.save();
+    ctx.globalAlpha = 0.12;
+
+    if (weapon.pellets > 1) {
+      // Shotgun: wide cone outline
+      const spread = weapon.spread;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      // Left edge of cone
+      ctx.moveTo(x, y);
+      ctx.lineTo(
+        x + Math.cos(angle - spread) * range,
+        y + Math.sin(angle - spread) * range
+      );
+      // Arc at the end
+      ctx.arc(x, y, range, angle - spread, angle + spread);
+      // Right edge back
+      ctx.lineTo(x, y);
+      ctx.stroke();
+
+      // Subtle fill
+      ctx.globalAlpha = 0.03;
+      ctx.fillStyle = color;
+      ctx.fill();
+
+    } else if (weapon.spread > 0) {
+      // SMG: narrow cone showing spread
+      const spread = weapon.spread;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(
+        x + Math.cos(angle - spread) * range,
+        y + Math.sin(angle - spread) * range
+      );
+      ctx.arc(x, y, range, angle - spread, angle + spread);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+
+      // Center line (most likely path)
+      ctx.globalAlpha = 0.08;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(angle) * 30, y + Math.sin(angle) * 30);
+      ctx.lineTo(x + Math.cos(angle) * range, y + Math.sin(angle) * range);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Subtle cone fill
+      ctx.globalAlpha = 0.02;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(angle - spread) * range, y + Math.sin(angle - spread) * range);
+      ctx.arc(x, y, range, angle - spread, angle + spread);
+      ctx.closePath();
+      ctx.fill();
+
+    } else if (weapon.name === 'Rifle') {
+      // Rifle: thick outlined line
+      const width = 6;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(
+        x + Math.cos(angle) * 30,
+        y + Math.sin(angle) * 30
+      );
+      ctx.lineTo(
+        x + Math.cos(angle) * range,
+        y + Math.sin(angle) * range
+      );
+      ctx.stroke();
+
+      // Range end marker
+      ctx.globalAlpha = 0.15;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      const endX = x + Math.cos(angle) * range;
+      const endY = y + Math.sin(angle) * range;
+      const perpAngle = angle + Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(endX + Math.cos(perpAngle) * 8, endY + Math.sin(perpAngle) * 8);
+      ctx.lineTo(endX - Math.cos(perpAngle) * 8, endY - Math.sin(perpAngle) * 8);
+      ctx.stroke();
+
+    } else {
+      // Pistol: thin outlined line
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(
+        x + Math.cos(angle) * 30,
+        y + Math.sin(angle) * 30
+      );
+      ctx.lineTo(
+        x + Math.cos(angle) * range,
+        y + Math.sin(angle) * range
+      );
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Range end dot
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(
+        x + Math.cos(angle) * range,
+        y + Math.sin(angle) * range,
+        3, 0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
   drawScopeOverlay(ctx, canvasW, canvasH) {
     ctx.strokeStyle = 'rgba(255, 200, 100, 0.3)';
     ctx.lineWidth = 1;
