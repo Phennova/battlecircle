@@ -109,7 +109,7 @@ export class Renderer {
     const radius = (visionRange || 600) * s;
 
     // Fill with dark
-    shadowCtx.fillStyle = 'rgba(0, 0, 0, 0.88)';
+    shadowCtx.fillStyle = 'rgba(0, 0, 0, 0.97)';
     shadowCtx.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
 
     // Cut out: intersect visibility polygon with a circle
@@ -132,7 +132,7 @@ export class Renderer {
 
     // Now paint back darkness outside the circle to clip to round shape
     shadowCtx.globalCompositeOperation = 'source-over';
-    shadowCtx.fillStyle = 'rgba(0, 0, 0, 0.88)';
+    shadowCtx.fillStyle = 'rgba(0, 0, 0, 0.97)';
     shadowCtx.beginPath();
     shadowCtx.rect(0, 0, canvas.width, canvas.height);
     shadowCtx.arc(centerX, centerY, radius, 0, Math.PI * 2, true);
