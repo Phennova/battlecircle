@@ -92,7 +92,8 @@ export class InputHandler {
       left: this.keys.left,
       right: this.keys.right,
       shooting: this.shooting,
-      angle: this.angle
+      angle: this.angle,
+      scoping: this.sniperMode && this.scopeStartTime !== null
     };
   }
 

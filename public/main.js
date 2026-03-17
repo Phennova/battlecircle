@@ -51,6 +51,8 @@ const effects = {
   hitFlash: null
 };
 let lastSniperFireTime = 0;
+let lastShotTime = 0; // client-side shot cooldown tracking
+let prevMagAmmo = -1; // to detect when a shot was fired
 const killFeed = [];
 
 // Warnings
@@ -520,9 +522,23 @@ function loop(timestamp) {
       inp.seq = seq;
       sendInput(inp);
 
-      // Set sniper mode
+      // Detect shots fired (mag ammo decreased)
+      const currentMagAmmo = me.gun ? me.gun.magAmmo : -1;
+      if (prevMagAmmo >= 0 && currentMagAmmo < prevMagAmmo && currentMagAmmo >= 0) {
+        lastShotTime = performance.now();
+      }
+      prevMagAmmo = currentMagAmmo;
+
+      // Shot cooldown
+      const weapon = me.gun ? WEAPONS[me.gun.type] : null;
+      const shotCooldown = weapon ? 1000 / weapon.fireRate : 0;
+      const timeSinceShot = performance.now() - lastShotTime;
+      const cooldownPct = shotCooldown > 0 ? Math.min(1, timeSinceShot / shotCooldown) : 1;
+      const onCooldown = cooldownPct < 1;
+
+      // Set sniper mode (block scope during cooldown)
       const isSniper = me.gun && me.gun.type === 'sniper';
-      inputHandler.setSniperMode(isSniper);
+      inputHandler.setSniperMode(isSniper && !onCooldown);
 
       // Handle action keys (block during healing/reloading)
       if (!me.healing && !me.reloading) {
@@ -585,6 +601,7 @@ function loop(timestamp) {
         if (me.gun && me.gun.magAmmo > 0) {
           socket.emit('sniperFire', { angle: sniperFire.angle });
           lastSniperFireTime = performance.now();
+          lastShotTime = performance.now();
         } else if (me.gun && me.gun.magAmmo <= 0) {
           if ((me.ammoReserve.heavy || 0) > 0) {
             warning = { text: 'Reload [R]', time: performance.now() };
@@ -617,7 +634,8 @@ function loop(timestamp) {
         ? [...activeStaticWalls, ...closedDoorWalls]
         : activeStaticWalls;
 
-      const speedMult = (me.healing || me.reloading) ? 0.3 : 1.0;
+      const isScoping = isSniper && inputHandler.scopeStartTime;
+      const speedMult = (me.healing || me.reloading) ? 0.3 : isScoping ? 0.4 : 1.0;
       predictedX += dx * PLAYER_SPEED * speedMult * dt;
       predictedY += dy * PLAYER_SPEED * speedMult * dt;
       const resolved = resolveAgainstWalls(predictedX, predictedY, PLAYER_RADIUS, allCollisionWalls);
@@ -787,6 +805,9 @@ function loop(timestamp) {
 
       // HUD
       hud.draw(ctx, canvas.width, canvas.height, me, gameState);
+      if (me.gun && onCooldown) {
+        hud.drawShotCooldown(ctx, canvas.width, canvas.height, cooldownPct);
+      }
       const teammates = (me.team !== undefined && me.team !== null)
         ? gameState.players.filter(p => p.id !== myId && p.alive && p.team === me.team)
         : [];

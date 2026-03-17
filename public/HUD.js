@@ -624,6 +624,30 @@ export class HUD {
     }
   }
 
+  drawShotCooldown(ctx, canvasW, canvasH, cooldownPct) {
+    if (cooldownPct >= 1) return; // ready to fire, no indicator
+
+    const cx = canvasW / 2;
+    const cy = canvasH / 2;
+    const radius = 22;
+
+    // Background ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Cooldown fill arc
+    const startAngle = -Math.PI / 2;
+    const endAngle = startAngle + cooldownPct * Math.PI * 2;
+    ctx.strokeStyle = cooldownPct > 0.8 ? 'rgba(80,200,120,0.6)' : 'rgba(255,200,50,0.5)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, endAngle);
+    ctx.stroke();
+  }
+
   _drawTeamScores(ctx, canvasW, scores) {
     const y = 60;
     const cx = canvasW / 2;

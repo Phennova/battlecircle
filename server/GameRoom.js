@@ -645,7 +645,8 @@ export class GameRoom {
       const inp = player.input;
 
       // Both healing and reloading: uncancellable, slow movement, no shooting
-      const speedMultiplier = (player.healing || player.reloading) ? 0.3 : 1.0;
+      const isScoping = player.input.scoping && player.gun && player.gun.type === 'sniper';
+      const speedMultiplier = (player.healing || player.reloading) ? 0.3 : isScoping ? 0.4 : 1.0;
 
       let dx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
       let dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
