@@ -51,7 +51,7 @@ const effects = {
   hitFlash: null
 };
 let lastSniperFireTime = 0;
-let lastShotTime = 0; // client-side shot cooldown tracking
+let lastShotTime = -10000; // client-side shot cooldown tracking (start ready)
 let prevMagAmmo = -1; // to detect when a shot was fired
 const killFeed = [];
 
@@ -536,9 +536,10 @@ function loop(timestamp) {
       const cooldownPct = shotCooldown > 0 ? Math.min(1, timeSinceShot / shotCooldown) : 1;
       const onCooldown = cooldownPct < 1;
 
-      // Set sniper mode (block scope during cooldown)
+      // Set sniper mode
       const isSniper = me.gun && me.gun.type === 'sniper';
-      inputHandler.setSniperMode(isSniper && !onCooldown);
+      inputHandler.setSniperMode(isSniper);
+      inputHandler.scopeBlocked = onCooldown; // block starting scope during cooldown
 
       // Handle action keys (block during healing/reloading)
       if (!me.healing && !me.reloading) {

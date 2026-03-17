@@ -12,6 +12,7 @@ export class InputHandler {
     // Sniper scope
     this.sniperMode = false;
     this.scopeStartTime = null;
+    this.scopeBlocked = false;
     this._sniperFirePending = false;
     this._sniperFireAngle = 0;
 
@@ -32,7 +33,7 @@ export class InputHandler {
       case 'Space':
         e.preventDefault();
         if (this.sniperMode) {
-          if (down && !this.scopeStartTime) {
+          if (down && !this.scopeStartTime && !this.scopeBlocked) {
             this.scopeStartTime = performance.now();
           } else if (!down && this.scopeStartTime) {
             this._sniperFirePending = true;
@@ -52,7 +53,7 @@ export class InputHandler {
 
   _onShoot(down) {
     if (this.sniperMode) {
-      if (down && !this.scopeStartTime) {
+      if (down && !this.scopeStartTime && !this.scopeBlocked) {
         this.scopeStartTime = performance.now();
       } else if (!down && this.scopeStartTime) {
         this._sniperFirePending = true;
