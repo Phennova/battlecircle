@@ -23,12 +23,14 @@ export class Bullet {
     // Predict how far the player will move during bullet flight
     // and add that to the range so the effective distance stays consistent
     const baseRange = weapon.range;
-    const flightTime = baseRange / weapon.bulletSpeed;
-    const bulletDir = { x: Math.cos(angle), y: Math.sin(angle) };
-    // Project player velocity onto bullet direction
-    const playerAlongBullet = (ownerVx || 0) * bulletDir.x + (ownerVy || 0) * bulletDir.y;
-    // Add the distance the player covers along the bullet's path during flight
-    this.range = baseRange + Math.max(0, playerAlongBullet * flightTime);
+    if (weapon.bulletSpeed > 0) {
+      const flightTime = baseRange / weapon.bulletSpeed;
+      const bulletDir = { x: Math.cos(angle), y: Math.sin(angle) };
+      const playerAlongBullet = (ownerVx || 0) * bulletDir.x + (ownerVy || 0) * bulletDir.y;
+      this.range = baseRange + Math.max(0, playerAlongBullet * flightTime);
+    } else {
+      this.range = baseRange;
+    }
   }
 
   update(dt) {
