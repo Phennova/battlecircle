@@ -635,7 +635,7 @@ function loop(timestamp) {
         ? [...activeStaticWalls, ...closedDoorWalls]
         : activeStaticWalls;
 
-      const isScoping = isSniper && inputHandler.scopeStartTime;
+      isScoping = isSniper && inputHandler.scopeStartTime;
       const speedMult = (me.healing || me.reloading) ? 0.3 : isScoping ? 0.4 : 1.0;
       predictedX += dx * PLAYER_SPEED * speedMult * dt;
       predictedY += dy * PLAYER_SPEED * speedMult * dt;
