@@ -16,6 +16,7 @@ let currentUser = null;
 let isSignUp = false;
 
 const authScreen = document.getElementById('authScreen');
+const authEmail = document.getElementById('authEmail');
 const authUsername = document.getElementById('authUsername');
 const authPassword = document.getElementById('authPassword');
 const authSubmit = document.getElementById('authSubmit');
@@ -28,28 +29,31 @@ window._toggleAuth = () => {
   authSubmit.textContent = isSignUp ? 'SIGN UP' : 'LOGIN';
   authToggleText.textContent = isSignUp ? 'Have an account?' : 'No account?';
   authToggleLink.textContent = isSignUp ? 'Login' : 'Sign Up';
+  authUsername.style.display = isSignUp ? 'block' : 'none';
   authError.textContent = '';
 };
 
 authSubmit.addEventListener('click', async () => {
-  const username = authUsername.value.trim();
+  const email = authEmail.value.trim();
   const password = authPassword.value;
+  const username = authUsername.value.trim();
   authError.textContent = '';
 
-  if (!username || username.length < 3) {
-    authError.textContent = 'Username must be at least 3 characters';
+  if (!email) {
+    authError.textContent = 'Email is required';
     return;
   }
   if (!password || password.length < 6) {
     authError.textContent = 'Password must be at least 6 characters';
     return;
   }
+  if (isSignUp && (!username || username.length < 3)) {
+    authError.textContent = 'Display name must be at least 3 characters';
+    return;
+  }
 
   authSubmit.disabled = true;
   authSubmit.textContent = 'LOADING...';
-
-  // Use email format: username@battlecircle.local
-  const email = `${username.toLowerCase()}@battlecircle.local`;
 
   try {
     if (isSignUp) {
@@ -80,7 +84,7 @@ authSubmit.addEventListener('click', async () => {
     document.getElementById('modeSelect').style.display = 'flex';
   } catch (err) {
     authError.textContent = err.message === 'Invalid login credentials'
-      ? 'Wrong username or password'
+      ? 'Wrong email or password'
       : err.message || 'Something went wrong';
   }
 
@@ -119,7 +123,7 @@ const socket = io({
     const { data: { session } } = await sbClient.auth.getSession();
     cb({
       token: session?.access_token || null,
-      username: currentUser?.user_metadata?.username || null
+      username: currentUser?.user_metadata?.username || currentUser?.email?.split('@')[0] || null
     });
   }
 });
