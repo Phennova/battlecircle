@@ -280,10 +280,18 @@ export class BotAI {
 
         // Movement based on engagement — never get closer than 50px
         if (engagement === 'push') {
-          if (dist > 50) {
+          if (dist > 80) {
             this._navigateTo(enemy.x, enemy.y, ctx, dt);
+          } else if (dist < 40) {
+            // Too close — back away to maintain shooting distance
+            const awayAngle = Math.atan2(bot.y - enemy.y, bot.x - enemy.x);
+            this._navigateTo(
+              bot.x + Math.cos(awayAngle) * 80,
+              bot.y + Math.sin(awayAngle) * 80,
+              ctx, dt
+            );
           }
-          // If within 50px, stop pushing — just shoot
+          // If 40-80px, hold position — just shoot
         } else if (engagement === 'retreat') {
           const awayAngle = Math.atan2(bot.y - enemy.y, bot.x - enemy.x);
           this._navigateTo(

@@ -826,6 +826,28 @@ export class GameRoom {
       player.y = resolved.y;
     });
 
+    // 1.25. Player-to-player repulsion — push overlapping players apart
+    const playerArr = [...this.players.values()].filter(p => p.alive);
+    for (let i = 0; i < playerArr.length; i++) {
+      for (let j = i + 1; j < playerArr.length; j++) {
+        const a = playerArr[i];
+        const b = playerArr[j];
+        const pdx = b.x - a.x;
+        const pdy = b.y - a.y;
+        const pDist = Math.sqrt(pdx * pdx + pdy * pdy);
+        const minDist = PLAYER_RADIUS * 2;
+        if (pDist < minDist && pDist > 0) {
+          const overlap = (minDist - pDist) / 2;
+          const nx = pdx / pDist;
+          const ny = pdy / pDist;
+          a.x -= nx * overlap;
+          a.y -= ny * overlap;
+          b.x += nx * overlap;
+          b.y += ny * overlap;
+        }
+      }
+    }
+
     // 1.5. Auto-collect ammo
     for (let i = this.groundItems.length - 1; i >= 0; i--) {
       const item = this.groundItems[i];
