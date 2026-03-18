@@ -106,8 +106,8 @@ function fleeAndFindHeals(bot, ctx) {
   return {
     score: 95,
     type: 'move',
-    goalX: healItem ? healItem.x : (ctx.coverPos ? ctx.coverPos.x : bot.x + (Math.random() - 0.5) * 200),
-    goalY: healItem ? healItem.y : (ctx.coverPos ? ctx.coverPos.y : bot.y + (Math.random() - 0.5) * 200)
+    goalX: healItem ? healItem.x : (ctx.coverPos ? ctx.coverPos.x : ctx.map.width / 2 + (Math.random() - 0.5) * 300),
+    goalY: healItem ? healItem.y : (ctx.coverPos ? ctx.coverPos.y : ctx.map.height / 2 + (Math.random() - 0.5) * 300)
   };
 }
 
@@ -242,16 +242,43 @@ function lootHeal(bot, ctx) {
 function combatEngage(bot, ctx) {
   if (!ctx.nearestEnemy || !ctx.canSeeEnemy) return { score: 0 };
 
-  // If unarmed and enemy is visible, FLEE instead of standing still
+  // If unarmed and enemy is visible, flee TOWARD nearest building for cover + loot
   if (!bot.gun) {
-    const dx = bot.x - ctx.nearestEnemy.x;
-    const dy = bot.y - ctx.nearestEnemy.y;
-    const fleeAngle = Math.atan2(dy, dx);
+    const enemyAngle = Math.atan2(ctx.nearestEnemy.y - bot.y, ctx.nearestEnemy.x - bot.x);
+    const buildings = ctx.buildings || [];
+
+    // Find nearest building that's roughly away from the enemy
+    let bestBuilding = null;
+    let bestScore = -Infinity;
+    for (const b of buildings) {
+      const bx = b.x + b.w / 2;
+      const by = b.y + b.h / 2;
+      const dist = Math.sqrt((bx - bot.x) ** 2 + (by - bot.y) ** 2);
+      const angleToBuilding = Math.atan2(by - bot.y, bx - bot.x);
+      // Prefer buildings that are away from the enemy (angle diff > 90 degrees)
+      let angleDiff = Math.abs(angleToBuilding - enemyAngle);
+      if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+      const awayBonus = angleDiff > Math.PI / 2 ? 200 : 0;
+      const score = awayBonus - dist; // closer + away from enemy = better
+      if (score > bestScore) {
+        bestScore = score;
+        bestBuilding = { x: bx, y: by };
+      }
+    }
+
+    // Fallback: flee toward map center if no buildings
+    if (!bestBuilding) {
+      bestBuilding = {
+        x: ctx.map.width / 2 + (Math.random() - 0.5) * 200,
+        y: ctx.map.height / 2 + (Math.random() - 0.5) * 200
+      };
+    }
+
     return {
-      score: 97, // higher than lootWeaponUnarmed (95) — survival first
+      score: 97,
       type: 'move',
-      goalX: bot.x + Math.cos(fleeAngle) * 300,
-      goalY: bot.y + Math.sin(fleeAngle) * 300
+      goalX: bestBuilding.x,
+      goalY: bestBuilding.y
     };
   }
 
