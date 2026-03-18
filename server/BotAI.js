@@ -456,15 +456,24 @@ export class BotAI {
       }
     }
 
-    // Check for closed doors on path and open them
+    // Open closed doors that are in our path (never close them — prevents self-blocking)
     if (this.room.doors) {
       for (const door of this.room.doors) {
         if (!door.open) {
           const doorCX = door.wallRect.x + door.wallRect.w / 2;
           const doorCY = door.wallRect.y + door.wallRect.h / 2;
           const distToDoor = Math.sqrt((doorCX - bot.x) ** 2 + (doorCY - bot.y) ** 2);
+          // Only open if we're moving toward the door
           if (distToDoor < 60) {
-            this._emitAction('pickup'); // opens door
+            const angleToDoor = Math.atan2(doorCY - bot.y, doorCX - bot.x);
+            const moveDir = Math.atan2(targetY - bot.y, targetX - bot.x);
+            let diff = Math.abs(angleToDoor - moveDir);
+            if (diff > Math.PI) diff = 2 * Math.PI - diff;
+            if (diff < Math.PI / 2) {
+              // Door is in our movement direction — open it
+              door.open = true;
+              this.room._rebuildAllWalls();
+            }
           }
         }
       }

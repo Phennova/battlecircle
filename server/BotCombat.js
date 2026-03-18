@@ -176,6 +176,10 @@ export function evaluateGrenade(bot, enemies, allWalls) {
   if (!bot.grenade || bot.grenade.count <= 0) return null;
   if (enemies.length === 0) return null;
 
+  // Cooldown — don't throw more than once every 2 seconds
+  const now = Date.now();
+  if (bot._lastGrenadeTime && now - bot._lastGrenadeTime < 2000) return null;
+
   const grenType = bot.grenade.type;
   const nearestEnemy = enemies[0];
   const dx = nearestEnemy.x - bot.x;
@@ -186,23 +190,61 @@ export function evaluateGrenade(bot, enemies, allWalls) {
   if (grenType === 'frag' && dist < 100) return null;
 
   if (grenType === 'frag') {
-    // Throw at enemy behind cover or clustered enemies
     const enemyBehindCover = !hasLineOfSightSimple(bot.x, bot.y, nearestEnemy.x, nearestEnemy.y, allWalls);
 
-    if (enemyBehindCover || enemies.length >= 2) {
+    if (enemyBehindCover || enemies.length >= 2 || dist > 200) {
+      // Track enemy movement to predict where they'll be
+      if (!bot._enemyTracker) bot._enemyTracker = {};
+      const tracker = bot._enemyTracker;
+      if (!tracker[nearestEnemy.id]) {
+        tracker[nearestEnemy.id] = { positions: [], lastUpdate: 0 };
+      }
+      const et = tracker[nearestEnemy.id];
+
+      // Sample enemy position every 200ms
+      if (now - et.lastUpdate > 200) {
+        et.positions.push({ x: nearestEnemy.x, y: nearestEnemy.y, t: now });
+        if (et.positions.length > 10) et.positions.shift();
+        et.lastUpdate = now;
+      }
+
+      // Calculate average velocity from tracked positions
+      let predictX = nearestEnemy.x;
+      let predictY = nearestEnemy.y;
+      if (et.positions.length >= 3) {
+        const oldest = et.positions[0];
+        const newest = et.positions[et.positions.length - 1];
+        const trackDt = (newest.t - oldest.t) / 1000;
+        if (trackDt > 0.1) {
+          const vx = (newest.x - oldest.x) / trackDt;
+          const vy = (newest.y - oldest.y) / trackDt;
+
+          // Predict where enemy will be when grenade arrives
+          // Grenade travel time = dist / 300 + fuse time (2.5s)
+          const travelTime = dist / 300;
+          const totalTime = travelTime + 1.5; // lead by 1.5s, not full fuse
+
+          predictX = nearestEnemy.x + vx * totalTime;
+          predictY = nearestEnemy.y + vy * totalTime;
+        }
+      }
+
+      bot._lastGrenadeTime = now;
+      const pdx = predictX - bot.x;
+      const pdy = predictY - bot.y;
       return {
         throw: true,
         type: 'frag',
-        targetX: nearestEnemy.x,
-        targetY: nearestEnemy.y,
-        angle: Math.atan2(dy, dx)
+        targetX: predictX,
+        targetY: predictY,
+        angle: Math.atan2(pdy, pdx)
       };
     }
   }
 
   if (grenType === 'smoke') {
-    // Smoke at own feet for escape
     if (bot.health < 40) {
+      bot._lastGrenadeTime = now;
       return {
         throw: true,
         type: 'smoke',
