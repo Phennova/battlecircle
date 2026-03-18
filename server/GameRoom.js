@@ -126,10 +126,12 @@ export class GameRoom {
   }
 
   addPlayer(socket) {
-    const name = generateName(this.usedNames);
+    // Use auth display name if available, otherwise generate random name
+    const name = socket.authUsername || generateName(this.usedNames);
     this.usedNames.add(name);
     // Create player at temp position, assign team, then pick spawn
     const player = new Player(socket.id, 0, 0, name);
+    player.supabaseId = socket.supabaseId || null;
 
     // Assign team for team modes (auto-balance)
     if (this.mode.teams) {
@@ -1228,6 +1230,7 @@ export class GameRoom {
   _handleKill(player, killerId, cause) {
     player.health = 0;
     player.alive = false;
+    player.deaths++;
 
     const attacker = killerId ? this.players.get(killerId) : null;
     if (attacker) attacker.kills++;

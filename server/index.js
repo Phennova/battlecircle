@@ -6,6 +6,7 @@ import { dirname, join } from 'path';
 import { GameRoom } from './GameRoom.js';
 import { generateMap } from './mapGenerator.js';
 import { GAME_MODES } from '../shared/gameModes.js';
+import { verifyToken, getOrCreatePlayer } from './supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -57,12 +58,28 @@ function cleanupRooms() {
   });
 }
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   const authToken = socket.handshake.auth?.token;
   const authUsername = socket.handshake.auth?.username;
   socket.authToken = authToken;
   socket.authUsername = authUsername;
-  console.log(`Player connected: ${socket.id} (${authUsername || 'guest'})`);
+  socket.supabaseId = null;
+
+  // Verify JWT and get Supabase user ID
+  if (authToken) {
+    try {
+      const user = await verifyToken(authToken);
+      if (user) {
+        socket.supabaseId = user.id;
+        // Ensure player profile exists
+        await getOrCreatePlayer(user.id, authUsername || user.email?.split('@')[0] || 'Player');
+      }
+    } catch (e) {
+      console.error('Auth verification error:', e.message);
+    }
+  }
+
+  console.log(`Player connected: ${socket.id} (${authUsername || 'guest'}) supabaseId:${socket.supabaseId || 'none'}`);
 
   socket.on('joinMode', (modeId) => {
     if (!GAME_MODES[modeId]) {

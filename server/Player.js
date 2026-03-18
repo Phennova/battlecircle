@@ -40,9 +40,11 @@ export class Player {
     this.ready = false;
     this.team = undefined; // set by GameRoom for team modes
     this.kills = 0;
+    this.deaths = 0;
     this.damageDealt = 0;
     this.placement = 0;
     this.joinedAt = Date.now();
+    this.supabaseId = null; // set by GameRoom from socket auth
   }
 
   toSnapshot() {
