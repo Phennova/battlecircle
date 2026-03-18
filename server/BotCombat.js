@@ -59,19 +59,86 @@ export function decideEngagement(bot, enemy, dist) {
 
 /**
  * Calculate aim angle toward a target with prediction and inaccuracy.
+ * Uses position tracking to estimate smoothed velocity instead of
+ * instantaneous input, preventing overshoot on strafing targets.
  */
 export function calculateAim(bot, target, weapon) {
   const dx = target.x - bot.x;
   const dy = target.y - bot.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
 
-  // Lead the target based on their velocity and bullet travel time
+  // Track target positions over time for velocity estimation
+  if (!bot._aimTracker) bot._aimTracker = {};
+  if (!bot._aimTracker[target.id]) {
+    bot._aimTracker[target.id] = { positions: [], avgVx: 0, avgVy: 0 };
+  }
+  const tracker = bot._aimTracker[target.id];
+  const now = Date.now();
+
+  // Sample position every 100ms
+  const lastSample = tracker.positions[tracker.positions.length - 1];
+  if (!lastSample || now - lastSample.t > 100) {
+    tracker.positions.push({ x: target.x, y: target.y, t: now });
+    // Keep last 15 samples (~1.5 seconds of history)
+    if (tracker.positions.length > 15) tracker.positions.shift();
+  }
+
+  // Calculate smoothed velocity from position history
   let aimX = target.x;
   let aimY = target.y;
 
-  if (weapon && weapon.bulletSpeed > 0) {
-    const travelTime = dist / weapon.bulletSpeed;
-    // Estimate target velocity from input
+  if (weapon && tracker.positions.length >= 3) {
+    const samples = tracker.positions;
+    const oldest = samples[0];
+    const newest = samples[samples.length - 1];
+    const trackDt = (newest.t - oldest.t) / 1000;
+
+    if (trackDt > 0.1) {
+      // Raw velocity over full tracking window
+      const rawVx = (newest.x - oldest.x) / trackDt;
+      const rawVy = (newest.y - oldest.y) / trackDt;
+
+      // Exponential moving average to smooth out oscillation
+      const smoothFactor = 0.3;
+      tracker.avgVx = tracker.avgVx * (1 - smoothFactor) + rawVx * smoothFactor;
+      tracker.avgVy = tracker.avgVy * (1 - smoothFactor) + rawVy * smoothFactor;
+
+      // For strafing detection: check if recent positions oscillate
+      // If the target reverses direction frequently, reduce lead amount
+      let directionChanges = 0;
+      for (let i = 2; i < samples.length; i++) {
+        const prevDx = samples[i-1].x - samples[i-2].x;
+        const currDx = samples[i].x - samples[i-1].x;
+        if (prevDx * currDx < 0) directionChanges++; // X direction reversed
+        const prevDy = samples[i-1].y - samples[i-2].y;
+        const currDy = samples[i].y - samples[i-1].y;
+        if (prevDy * currDy < 0) directionChanges++;
+      }
+
+      // Strafe factor: more reversals = aim more at center, less lead
+      const strafeFactor = Math.max(0.1, 1 - directionChanges * 0.1);
+
+      if (weapon.bulletSpeed > 0) {
+        const travelTime = dist / weapon.bulletSpeed;
+        aimX += tracker.avgVx * travelTime * strafeFactor;
+        aimY += tracker.avgVy * travelTime * strafeFactor;
+      }
+
+      // For long range: also aim at average position center (strafe midpoint)
+      if (dist > 300 && samples.length >= 6) {
+        let sumX = 0, sumY = 0;
+        for (const s of samples) { sumX += s.x; sumY += s.y; }
+        const centerX = sumX / samples.length;
+        const centerY = sumY / samples.length;
+
+        // Blend between predicted position and center based on strafe amount
+        const centerBlend = Math.min(0.5, directionChanges * 0.08);
+        aimX = aimX * (1 - centerBlend) + centerX * centerBlend;
+        aimY = aimY * (1 - centerBlend) + centerY * centerBlend;
+      }
+    }
+  } else if (weapon && weapon.bulletSpeed > 0) {
+    // Fallback: use input-based prediction if not enough tracking data
     const inp = target.input || {};
     let tvx = ((inp.right ? 1 : 0) - (inp.left ? 1 : 0));
     let tvy = ((inp.down ? 1 : 0) - (inp.up ? 1 : 0));
@@ -81,14 +148,15 @@ export function calculateAim(bot, target, weapon) {
       tvy /= len;
     }
     const targetSpeed = target.speed || 180;
+    const travelTime = dist / weapon.bulletSpeed;
     aimX += tvx * targetSpeed * travelTime;
     aimY += tvy * targetSpeed * travelTime;
   }
 
   let angle = Math.atan2(aimY - bot.y, aimX - bot.x);
 
-  // Add inaccuracy based on distance
-  const inaccuracy = 0.02 + (dist / 600) * 0.04; // 0.02-0.06 rad
+  // Add inaccuracy based on distance (reduced at long range for better aim)
+  const inaccuracy = 0.015 + (dist / 800) * 0.025;
   angle += (Math.random() - 0.5) * 2 * inaccuracy;
 
   return angle;
