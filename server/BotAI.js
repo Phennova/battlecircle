@@ -491,6 +491,7 @@ export class BotAI {
 
       // Face movement direction when not in combat
       if (!this.targetId && this.currentBehavior !== 'combat') {
+        const moveAngle = Math.atan2(dy, dx);
         bot.angle = smoothAim(bot.angle, moveAngle, dt);
         bot.input.angle = bot.angle;
       }
