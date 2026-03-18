@@ -58,7 +58,11 @@ function cleanupRooms() {
 }
 
 io.on('connection', (socket) => {
-  console.log(`Player connected: ${socket.id}`);
+  const authToken = socket.handshake.auth?.token;
+  const authUsername = socket.handshake.auth?.username;
+  socket.authToken = authToken;
+  socket.authUsername = authUsername;
+  console.log(`Player connected: ${socket.id} (${authUsername || 'guest'})`);
 
   socket.on('joinMode', (modeId) => {
     if (!GAME_MODES[modeId]) {

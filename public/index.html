@@ -335,12 +335,111 @@
     .mode-btn:nth-child(3) { animation-delay: 0.46s; }
     .mode-btn:nth-child(4) { animation-delay: 0.54s; }
     .mode-btn:nth-child(5) { animation-delay: 0.62s; }
+    /* ═══ AUTH SCREEN ═══ */
+    #authScreen {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: var(--bg-deep);
+      z-index: 25;
+      overflow: hidden;
+    }
+    #authScreen::before {
+      content: '';
+      position: absolute; inset: -50%;
+      width: 200%; height: 200%;
+      background-image:
+        linear-gradient(rgba(74,158,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(74,158,255,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridDrift 20s linear infinite;
+      pointer-events: none;
+    }
+    .auth-box {
+      position: relative; z-index: 1;
+      width: 340px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .auth-box h1 {
+      font-family: var(--font-display);
+      font-size: 42px; font-weight: 900;
+      letter-spacing: 6px;
+      background: linear-gradient(135deg, #fff 0%, var(--accent) 50%, #fff 100%);
+      background-size: 200% 200%;
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: titleShimmer 4s ease-in-out infinite;
+      margin-bottom: 8px;
+    }
+    .auth-box .tagline {
+      font-size: 12px; letter-spacing: 5px; color: var(--text-dim);
+      text-transform: uppercase; margin-bottom: 32px;
+    }
+    .auth-input {
+      width: 100%; padding: 12px 16px; margin-bottom: 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      font-family: var(--font-body); font-size: 15px;
+      outline: none; transition: border-color 0.2s;
+    }
+    .auth-input:focus { border-color: var(--accent); }
+    .auth-input::placeholder { color: var(--text-muted); }
+    .auth-submit {
+      width: 100%; padding: 14px; margin-top: 8px;
+      background: transparent;
+      border: 2px solid rgba(74,158,255,0.3);
+      color: var(--accent);
+      font-family: var(--font-display); font-size: 12px;
+      letter-spacing: 3px; text-transform: uppercase;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .auth-submit:hover {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+    }
+    .auth-toggle {
+      margin-top: 16px; color: var(--text-dim); font-size: 13px;
+      font-family: var(--font-body);
+    }
+    .auth-toggle a {
+      color: var(--accent); cursor: pointer; text-decoration: none;
+    }
+    .auth-toggle a:hover { text-decoration: underline; }
+    .auth-error {
+      color: #ff6b4a; font-size: 12px; margin-top: 8px;
+      font-family: var(--font-body); text-align: center;
+      min-height: 16px;
+    }
+    .auth-welcome {
+      font-family: var(--font-body); font-size: 14px;
+      color: var(--text-dim); margin-bottom: 12px;
+    }
   </style>
 </head>
 <body>
   <canvas id="game"></canvas>
 
-  <div id="modeSelect">
+  <!-- Auth Screen -->
+  <div id="authScreen">
+    <div class="auth-box">
+      <h1>BattleCircle</h1>
+      <div class="tagline">Arena Combat Redefined</div>
+      <div class="divider" style="margin-bottom:24px"></div>
+      <div id="authForm">
+        <input class="auth-input" id="authUsername" type="text" placeholder="Username" autocomplete="username">
+        <input class="auth-input" id="authPassword" type="password" placeholder="Password" autocomplete="current-password">
+        <button class="auth-submit" id="authSubmit">LOGIN</button>
+        <div class="auth-toggle">
+          <span id="authToggleText">No account?</span>
+          <a id="authToggleLink" onclick="window._toggleAuth()">Sign Up</a>
+        </div>
+        <div class="auth-error" id="authError"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modeSelect" style="display:none">
     <div class="menu-content">
       <div class="title-group">
         <h1>BattleCircle</h1>

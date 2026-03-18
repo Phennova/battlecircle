@@ -5,6 +5,98 @@ import { HUD } from './HUD.js';
 import { PLAYER_RADIUS, PLAYER_SPEED, PLAYER_HP } from '/shared/constants.js';
 import { resolveAgainstWalls } from '/shared/collision.js';
 import { WEAPONS } from '/shared/weapons.js';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// ═══ AUTH ═══
+const SUPABASE_URL = 'https://tzsqedjxlytvkoxyoepe.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6c3FlZGp4bHl0dmtveHlvZXBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MTU3OTIsImV4cCI6MjA4OTM5MTc5Mn0.B9ynes5NLZn9Zkcvwl5okZxH4_Qg_Nn_k-OqTEmSNd0';
+const sbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+let isSignUp = false;
+
+const authScreen = document.getElementById('authScreen');
+const authUsername = document.getElementById('authUsername');
+const authPassword = document.getElementById('authPassword');
+const authSubmit = document.getElementById('authSubmit');
+const authError = document.getElementById('authError');
+const authToggleText = document.getElementById('authToggleText');
+const authToggleLink = document.getElementById('authToggleLink');
+
+window._toggleAuth = () => {
+  isSignUp = !isSignUp;
+  authSubmit.textContent = isSignUp ? 'SIGN UP' : 'LOGIN';
+  authToggleText.textContent = isSignUp ? 'Have an account?' : 'No account?';
+  authToggleLink.textContent = isSignUp ? 'Login' : 'Sign Up';
+  authError.textContent = '';
+};
+
+authSubmit.addEventListener('click', async () => {
+  const username = authUsername.value.trim();
+  const password = authPassword.value;
+  authError.textContent = '';
+
+  if (!username || username.length < 3) {
+    authError.textContent = 'Username must be at least 3 characters';
+    return;
+  }
+  if (!password || password.length < 6) {
+    authError.textContent = 'Password must be at least 6 characters';
+    return;
+  }
+
+  authSubmit.disabled = true;
+  authSubmit.textContent = 'LOADING...';
+
+  // Use email format: username@battlecircle.local
+  const email = `${username.toLowerCase()}@battlecircle.local`;
+
+  try {
+    if (isSignUp) {
+      const { data, error } = await sbClient.auth.signUp({
+        email,
+        password,
+        options: { data: { username } }
+      });
+      if (error) throw error;
+      currentUser = data.user;
+
+      // Create player profile
+      await sbClient.from('players').insert({
+        id: currentUser.id,
+        username
+      });
+    } else {
+      const { data, error } = await sbClient.auth.signInWithPassword({
+        email,
+        password
+      });
+      if (error) throw error;
+      currentUser = data.user;
+    }
+
+    // Success — hide auth, show mode select
+    authScreen.style.display = 'none';
+    document.getElementById('modeSelect').style.display = 'flex';
+  } catch (err) {
+    authError.textContent = err.message === 'Invalid login credentials'
+      ? 'Wrong username or password'
+      : err.message || 'Something went wrong';
+  }
+
+  authSubmit.disabled = false;
+  authSubmit.textContent = isSignUp ? 'SIGN UP' : 'LOGIN';
+});
+
+// Check for existing session
+(async () => {
+  const { data: { session } } = await sbClient.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    authScreen.style.display = 'none';
+    document.getElementById('modeSelect').style.display = 'flex';
+  }
+})();
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -22,7 +114,15 @@ const shadowCaster = new ShadowCaster();
 const hud = new HUD();
 
 // Connect to server
-const socket = io();
+const socket = io({
+  auth: async (cb) => {
+    const { data: { session } } = await sbClient.auth.getSession();
+    cb({
+      token: session?.access_token || null,
+      username: currentUser?.user_metadata?.username || null
+    });
+  }
+});
 let myId = null;
 let map = null;
 let gameState = null;
