@@ -27,14 +27,14 @@ export const WEAPONS = {
   },
   rifle: {
     name: 'Rifle',
-    fireRate: 1.5,
+    fireRate: 2.0,
     damage: 35,
-    range: 700,
+    range: 525,
     magSize: 10,
     reloadTime: 1500,
     bulletSpeed: 1200,
     pellets: 1,
-    spread: 0,
+    spread: 0.02,
     color: '#4a9eff',
     ammoType: 'heavy'
   },

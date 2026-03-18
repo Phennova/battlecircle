@@ -870,6 +870,7 @@ function loop(timestamp) {
       const myGunType = me.gun ? me.gun.type : null;
       // Weapon range preview
       if (me.gun && WEAPONS[me.gun.type]) {
+        renderer._sniperScoping = isScoping;
         renderer.drawWeaponRange(ctx, viewX, viewY, inp.angle, WEAPONS[me.gun.type], cameraScale);
       }
       renderer.drawPlayer(viewX, viewY, inp.angle, PLAYER_RADIUS, getPlayerColor(me, playerIndex), me.health, PLAYER_HP, myGunType, me.name);

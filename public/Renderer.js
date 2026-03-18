@@ -1283,7 +1283,8 @@ export class Renderer {
   }
 
   drawWeaponRange(ctx, x, y, angle, weapon, cameraScale) {
-    if (!weapon || weapon.name === 'Sniper') return;
+    if (!weapon) return;
+    if (weapon.name === 'Sniper' && !this._sniperScoping) return;
     const _s = cameraScale || 1;
     const range = weapon.range;
     const color = weapon.color;
@@ -1351,33 +1352,54 @@ export class Renderer {
       ctx.fill();
 
     } else if (weapon.name === 'Rifle') {
-      // Rifle: thick outlined line
-      const width = 6;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(
-        x + Math.cos(angle) * 30,
-        y + Math.sin(angle) * 30
-      );
-      ctx.lineTo(
-        x + Math.cos(angle) * range,
-        y + Math.sin(angle) * range
-      );
-      ctx.stroke();
-
-      // Range end marker
-      ctx.globalAlpha = 0.15;
+      // Rifle: narrow cone showing slight spread
+      const spread = weapon.spread || 0.02;
       ctx.strokeStyle = color;
       ctx.lineWidth = 1;
-      const endX = x + Math.cos(angle) * range;
-      const endY = y + Math.sin(angle) * range;
-      const perpAngle = angle + Math.PI / 2;
       ctx.beginPath();
-      ctx.moveTo(endX + Math.cos(perpAngle) * 8, endY + Math.sin(perpAngle) * 8);
-      ctx.lineTo(endX - Math.cos(perpAngle) * 8, endY - Math.sin(perpAngle) * 8);
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(angle - spread) * range, y + Math.sin(angle - spread) * range);
+      ctx.arc(x, y, range, angle - spread, angle + spread);
+      ctx.lineTo(x, y);
       ctx.stroke();
+
+      // Center line
+      ctx.globalAlpha = 0.08;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(angle) * 30, y + Math.sin(angle) * 30);
+      ctx.lineTo(x + Math.cos(angle) * range, y + Math.sin(angle) * range);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Subtle fill
+      ctx.globalAlpha = 0.02;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(angle - spread) * range, y + Math.sin(angle - spread) * range);
+      ctx.arc(x, y, range, angle - spread, angle + spread);
+      ctx.closePath();
+      ctx.fill();
+
+    } else if (weapon.name === 'Sniper') {
+      // Sniper scope: long hitscan line across entire screen
+      ctx.globalAlpha = 0.15;
+      ctx.strokeStyle = '#ff6b4a';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([8, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(angle) * 30, y + Math.sin(angle) * 30);
+      ctx.lineTo(x + Math.cos(angle) * 3000, y + Math.sin(angle) * 3000);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Dot at center
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#ff6b4a';
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(angle) * 200, y + Math.sin(angle) * 200, 3, 0, Math.PI * 2);
+      ctx.fill();
 
     } else {
       // Pistol: thin outlined line
@@ -1457,7 +1479,16 @@ export class Renderer {
   }
 
   drawActionProgressBar(ctx, canvasW, canvasH, me, gameState) {
-    // Show progress bar for healing or reloading
+    // Always track state transitions even when not drawing
+    if (!me.healing && this._wasHealing) {
+      this._wasHealing = false;
+      this._healStart = null;
+    }
+    if (!me.reloading && this._wasReloading) {
+      this._wasReloading = false;
+      this._reloadStart = null;
+    }
+
     if (!me || (!me.healing && !me.reloading)) return;
 
     const barW = 120;
@@ -1465,22 +1496,18 @@ export class Renderer {
     const cx = canvasW / 2;
     const cy = canvasH / 2 + 35;
 
-    // Estimate progress from game state timing
-    // We don't have exact start time, so use a pulse animation as fallback
     let label, color, progress;
 
     if (me.healing) {
       const healItem = me.heal;
       const duration = healItem && healItem.type === 'medkit' ? 4000 : 1500;
-      // Animate progress bar
-      if (!this._healStart || !this._wasHealing) this._healStart = performance.now();
-      this._wasHealing = true;
+      if (!this._wasHealing) {
+        this._healStart = performance.now();
+        this._wasHealing = true;
+      }
       progress = Math.min(1, (performance.now() - this._healStart) / duration);
       label = 'HEALING';
       color = '#50c878';
-    } else {
-      this._wasHealing = false;
-      this._healStart = null;
     }
 
     if (me.reloading) {
@@ -1488,15 +1515,14 @@ export class Renderer {
       if (gun) {
         const weapon = WEAPONS[gun.type];
         const duration = weapon ? weapon.reloadTime : 1500;
-        if (!this._reloadStart || !this._wasReloading) this._reloadStart = performance.now();
-        this._wasReloading = true;
+        if (!this._wasReloading) {
+          this._reloadStart = performance.now();
+          this._wasReloading = true;
+        }
         progress = Math.min(1, (performance.now() - this._reloadStart) / duration);
         label = 'RELOADING';
         color = '#ffc832';
       }
-    } else {
-      this._wasReloading = false;
-      this._reloadStart = null;
     }
 
     if (progress === undefined) return;
