@@ -14,21 +14,21 @@ const STATES = { WAITING: 'WAITING', COUNTDOWN: 'COUNTDOWN', ACTIVE: 'ACTIVE', E
 const TEAM_COLORS = ['blue', 'red'];
 
 const LOOT_TABLE = [
-  { type: 'pistol', slot: 'gun', weight: 16 },
-  { type: 'shotgun', slot: 'gun', weight: 12 },
-  { type: 'rifle', slot: 'gun', weight: 10 },
-  { type: 'smg', slot: 'gun', weight: 10 },
-  { type: 'sniper', slot: 'gun', weight: 6 },
+  { type: 'pistol', slot: 'gun', weight: 10 },
+  { type: 'shotgun', slot: 'gun', weight: 8 },
+  { type: 'rifle', slot: 'gun', weight: 7 },
+  { type: 'smg', slot: 'gun', weight: 7 },
+  { type: 'sniper', slot: 'gun', weight: 4 },
   { type: 'frag', slot: 'grenade', weight: 10 },
   { type: 'smoke', slot: 'grenade', weight: 8 },
-  { type: 'bandage', slot: 'heal', weight: 12 },
-  { type: 'medkit', slot: 'heal', weight: 6 },
-  { type: 'light_ammo', slot: 'ammo', ammoType: 'light', weight: 18 },
-  { type: 'shells_ammo', slot: 'ammo', ammoType: 'shells', weight: 16 },
-  { type: 'heavy_ammo', slot: 'ammo', ammoType: 'heavy', weight: 16 },
+  { type: 'bandage', slot: 'heal', weight: 18 },
+  { type: 'medkit', slot: 'heal', weight: 8 },
+  { type: 'light_ammo', slot: 'ammo', ammoType: 'light', weight: 22 },
+  { type: 'shells_ammo', slot: 'ammo', ammoType: 'shells', weight: 20 },
+  { type: 'heavy_ammo', slot: 'ammo', ammoType: 'heavy', weight: 20 },
 ];
 
-const ITEMS_PER_SLOT = 2;
+const ITEMS_PER_SLOT = 3;
 
 let nextItemId = 0;
 
