@@ -183,6 +183,9 @@ export function smoothAim(currentAngle, targetAngle, dt) {
 export function shouldFire(bot, weapon, dist, dt) {
   if (!weapon || !bot.gun || bot.gun.magAmmo <= 0) return false;
 
+  // Don't fire if target is beyond weapon range (with small margin)
+  if (dist > weapon.range * 1.1) return false;
+
   const type = weapon.name.toLowerCase();
 
   // Shotgun: only fire when close

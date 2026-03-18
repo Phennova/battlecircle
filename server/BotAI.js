@@ -269,7 +269,12 @@ export class BotAI {
 
         const dist = ctx.nearestEnemyDist;
         const weapon = bot.gun ? WEAPONS[bot.gun.type] : null;
-        const engagement = decideEngagement(bot, enemy, dist);
+        let engagement = decideEngagement(bot, enemy, dist);
+
+        // Force push if out of weapon range — need to close distance first
+        if (weapon && dist > weapon.range * 0.9) {
+          engagement = 'push';
+        }
 
         // Aim at enemy
         if (weapon) {
@@ -278,7 +283,7 @@ export class BotAI {
           bot.input.angle = bot.angle;
         }
 
-        // Movement based on engagement — never get closer than 50px
+        // Movement based on engagement
         if (engagement === 'push') {
           if (dist > 80) {
             this._navigateTo(enemy.x, enemy.y, ctx, dt);
@@ -534,6 +539,21 @@ export class BotAI {
         this.stuckCount++;
         this.currentPath = [];
         this.pathRecalcTimer = 0;
+
+        // Open any nearby closed doors — might be what's trapping us
+        if (this.room.doors) {
+          for (const door of this.room.doors) {
+            if (!door.open) {
+              const doorCX = door.wallRect.x + door.wallRect.w / 2;
+              const doorCY = door.wallRect.y + door.wallRect.h / 2;
+              const distToDoor = Math.sqrt((doorCX - bot.x) ** 2 + (doorCY - bot.y) ** 2);
+              if (distToDoor < 120) {
+                door.open = true;
+                this.room._rebuildAllWalls();
+              }
+            }
+          }
+        }
 
         // Blacklist current position so bot doesn't path back here
         if (!this._blacklistedPositions) this._blacklistedPositions = [];
