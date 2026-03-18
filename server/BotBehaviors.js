@@ -119,13 +119,24 @@ function lootWeaponUnarmed(bot, ctx) {
   if (bot.gun) return { score: 0 };
   const weaponItem = findNearestItem(bot, ctx.visibleItems, ['pistol', 'shotgun', 'rifle', 'smg', 'sniper']);
   if (!weaponItem) {
-    // No weapon visible — wander toward buildings to find one
+    // No weapon visible — wander toward nearest building (unique per bot based on position)
     if (!bot._lootPatrolGoal || distSq(bot, bot._lootPatrolGoal) < 3600) {
-      // Pick a random building to search
       const buildings = ctx.buildings || [];
       if (buildings.length > 0) {
-        const b = buildings[Math.floor(Math.random() * buildings.length)];
-        bot._lootPatrolGoal = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+        // Pick the nearest building to THIS bot (so each bot goes to different ones)
+        let nearestB = buildings[0];
+        let nearestD = Infinity;
+        for (const b of buildings) {
+          const bx = b.x + b.w / 2;
+          const by = b.y + b.h / 2;
+          const d = (bx - bot.x) ** 2 + (by - bot.y) ** 2;
+          if (d < nearestD) { nearestD = d; nearestB = b; }
+        }
+        // Add some randomness to the position inside the building
+        bot._lootPatrolGoal = {
+          x: nearestB.x + 30 + Math.random() * (nearestB.w - 60),
+          y: nearestB.y + 30 + Math.random() * (nearestB.h - 60)
+        };
       } else {
         bot._lootPatrolGoal = {
           x: 200 + Math.random() * (ctx.map.width - 400),
@@ -301,10 +312,11 @@ function reloadUrgent(bot, ctx) {
   if (!bot.gun || bot.gun.magAmmo > 0) return { score: 0 };
   const ammoType = WEAPONS[bot.gun.type]?.ammoType;
   if (!ammoType || bot.ammoReserve[ammoType] <= 0) return { score: 0 };
-  if (!ctx.nearestEnemy) return { score: 0 }; // not urgent if no enemies
 
+  // Score 98 — must override combat commitment (80+15=95)
+  // Empty magazine in combat is critical
   return {
-    score: 90,
+    score: 98,
     type: 'cover_and_reload',
     goalX: ctx.coverPos ? ctx.coverPos.x : bot.x,
     goalY: ctx.coverPos ? ctx.coverPos.y : bot.y
