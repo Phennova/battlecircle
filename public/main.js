@@ -176,6 +176,17 @@ socket.on('lobbyUpdate', (data) => {
       </div>`
     ).join('');
   }
+
+  // Add fill with bots button (not in arcade modes)
+  if (!data.isArcade && data.count < data.max) {
+    playerList.innerHTML += `
+      <div style="margin-top:12px;text-align:center">
+        <button onclick="window._voteFillBots()" style="padding:8px 20px;background:transparent;border:1px solid rgba(255,200,50,0.3);color:#ffc832;cursor:pointer;font-family:Orbitron,sans-serif;font-size:9px;letter-spacing:2px;text-transform:uppercase;transition:all 0.2s"
+          onmouseover="this.style.background='rgba(255,200,50,0.08)'" onmouseout="this.style.background='transparent'">
+          Fill with Bots (${data.botVotes}/${data.botVotesNeeded} votes)
+        </button>
+      </div>`;
+  }
 });
 
 // Team join handler (called from inline onclick)
@@ -188,6 +199,10 @@ window._joinTeam = (teamIndex) => {
 
 window._selectClass = (classId) => {
   socket.emit('selectClass', classId);
+};
+
+window._voteFillBots = () => {
+  socket.emit('voteFillBots');
 };
 
 socket.on('countdown', (data) => {

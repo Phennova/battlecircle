@@ -174,6 +174,16 @@ export class GameRoom {
       this._broadcastLobby();
     });
 
+    socket.on('voteFillBots', () => {
+      const p = this.players.get(socket.id);
+      if (!p || this.state !== STATES.WAITING || this.mode.arcade) return;
+      if (this.players.size < 1) return;
+
+      p.votedFillBots = true;
+      this._broadcastLobby();
+      this._checkBotFillVote();
+    });
+
     socket.on('toggleReady', () => {
       const p = this.players.get(socket.id);
       if (!p || this.state !== STATES.WAITING) return;
@@ -567,16 +577,60 @@ export class GameRoom {
       playerList.push({
         name: p.name,
         ready: p.ready || false,
-        team: p.team !== undefined ? TEAM_COLORS[p.team] : null
+        team: p.team !== undefined ? TEAM_COLORS[p.team] : null,
+        isBot: p.isBot || false
       });
     });
+    const humans = [...this.players.values()].filter(p => !p.isBot);
+    const votedCount = humans.filter(p => p.votedFillBots).length;
     this.io.to(this.id).emit('lobbyUpdate', {
       players: playerList,
       count: this.players.size,
       max: this.mode.maxPlayers,
       modeId: this.modeId,
-      teams: this.mode.teams
+      teams: this.mode.teams,
+      botVotes: votedCount,
+      botVotesNeeded: Math.ceil(humans.length / 2),
+      isArcade: this.mode.arcade || false
     });
+  }
+
+  _checkBotFillVote() {
+    const humans = [...this.players.values()].filter(p => !p.isBot);
+    if (humans.length === 0) return;
+
+    const voted = humans.filter(p => p.votedFillBots).length;
+    const needed = Math.ceil(humans.length / 2); // majority
+
+    if (voted >= needed) {
+      // Fill remaining slots with bots
+      const maxPlayers = this.mode.maxPlayers || 8;
+      const slotsToFill = maxPlayers - this.players.size;
+      if (slotsToFill <= 0) return;
+
+      // Temporarily set botCount and spawn
+      const origBotCount = this.mode.botCount;
+      this.mode.botCount = slotsToFill;
+      this._spawnBots();
+      this.mode.botCount = origBotCount;
+
+      // Auto-ready all bots
+      this.bots.forEach(ai => { ai.bot.ready = true; });
+
+      // In team modes, assign bots to teams to balance
+      if (this.mode.teams) {
+        this.bots.forEach(ai => {
+          if (ai.bot.team === undefined) {
+            const teamCounts = [0, 0];
+            this.players.forEach(p => { if (p.team !== undefined) teamCounts[p.team]++; });
+            ai.bot.team = teamCounts[0] <= teamCounts[1] ? 0 : 1;
+          }
+        });
+      }
+
+      this._broadcastLobby();
+      this.io.to(this.id).emit('botsFilled', { count: slotsToFill });
+    }
   }
 
   _checkAllReady() {
