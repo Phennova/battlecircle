@@ -504,9 +504,18 @@ export class BotAI {
    */
   _checkStuck(dt) {
     const bot = this.bot;
-    const movedDist = Math.sqrt((bot.x - this.lastPos.x) ** 2 + (bot.y - this.lastPos.y) ** 2);
 
-    if (movedDist < 3) {
+    // Track position history over 1 second (20 ticks)
+    if (!this._posHistory) this._posHistory = [];
+    this._posHistory.push({ x: bot.x, y: bot.y });
+    if (this._posHistory.length > 20) this._posHistory.shift();
+
+    // Check if bot has moved less than 30px total over the last second
+    const oldest = this._posHistory[0];
+    const totalDist = Math.sqrt((bot.x - oldest.x) ** 2 + (bot.y - oldest.y) ** 2);
+    const hasFullHistory = this._posHistory.length >= 20;
+
+    if (hasFullHistory && totalDist < 30) {
       this.stuckTimer += dt;
       this.stuckCount = (this.stuckCount || 0);
 
@@ -547,9 +556,8 @@ export class BotAI {
       }
     } else {
       this.stuckTimer = 0;
-      if (movedDist > 5) this.stuckCount = 0;
+      if (totalDist > 50) this.stuckCount = 0;
     }
-    this.lastPos = { x: bot.x, y: bot.y };
   }
 
   /**

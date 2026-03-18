@@ -450,8 +450,10 @@ export class GameRoom {
         this.allWalls.push(door.wallRect);
       }
     }
-    // Rebuild nav grid
-    this.navGrid.buildFromWalls(this.allWalls);
+    // Rebuild nav grid — exclude closed doors so bots can path through them
+    // (bots open doors when they reach them)
+    const navWalls = this.staticWalls.filter((_, idx) => !this.destroyedWalls.has(idx));
+    this.navGrid.buildFromWalls(navWalls);
   }
 
   _spawnBots() {
