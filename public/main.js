@@ -13,7 +13,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const sbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
-let isSignUp = false;
+let isSignUp = true;
 
 const authScreen = document.getElementById('authScreen');
 const authEmail = document.getElementById('authEmail');
