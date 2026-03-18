@@ -160,12 +160,11 @@ export class NavGrid {
 
     const openSet = new MinHeap();
     const gScore = new Map();
-    const fScore = new Map();
     const cameFrom = new Map();
+    const closedSet = new Set();
 
     gScore.set(startKey, 0);
-    fScore.set(startKey, this._heuristic(start.c, start.r, end.c, end.r));
-    openSet.push(startKey, fScore.get(startKey));
+    openSet.push(startKey, this._heuristic(start.c, start.r, end.c, end.r));
 
     const neighbors = [
       [-1, 0], [1, 0], [0, -1], [0, 1],
@@ -179,6 +178,10 @@ export class NavGrid {
     while (openSet.size > 0 && iterations < maxIterations) {
       iterations++;
       const currentKey = openSet.pop();
+
+      // Skip if already processed (duplicate in heap)
+      if (closedSet.has(currentKey)) continue;
+      closedSet.add(currentKey);
 
       if (currentKey === endKey) {
         // Reconstruct path
@@ -212,11 +215,11 @@ export class NavGrid {
         const dangerCost = dangerSet.has(nKey) ? 10 : 0; // danger zones are expensive
         const tentG = (gScore.get(currentKey) || 0) + moveCost + dangerCost;
 
+        if (closedSet.has(nKey)) continue;
         if (tentG < (gScore.get(nKey) || Infinity)) {
           cameFrom.set(nKey, currentKey);
           gScore.set(nKey, tentG);
           const f = tentG + this._heuristic(nc, nr, end.c, end.r);
-          fScore.set(nKey, f);
           openSet.push(nKey, f);
         }
       }
