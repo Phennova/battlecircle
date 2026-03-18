@@ -82,6 +82,7 @@ authSubmit.addEventListener('click', async () => {
     // Success — hide auth, show mode select
     authScreen.style.display = 'none';
     document.getElementById('modeSelect').style.display = 'flex';
+    _populateSidebar();
   } catch (err) {
     authError.textContent = err.message === 'Invalid login credentials'
       ? 'Wrong email or password'
@@ -92,6 +93,25 @@ authSubmit.addEventListener('click', async () => {
   authSubmit.textContent = isSignUp ? 'SIGN UP' : 'LOGIN';
 });
 
+async function _populateSidebar() {
+  const displayName = currentUser?.user_metadata?.username || currentUser?.email?.split('@')[0] || 'Player';
+  const el = document.getElementById('sidebarUsername');
+  if (el) el.textContent = displayName;
+
+  // Load stats from Supabase
+  const { data } = await sbClient.from('players').select('*').eq('id', currentUser.id).single();
+  if (data) {
+    const ratingEl = document.getElementById('sidebarRating');
+    if (ratingEl) ratingEl.textContent = `Rating: ${Math.round(data.rating)}`;
+    const kd = data.total_deaths > 0 ? (data.total_kills / data.total_deaths).toFixed(1) : data.total_kills;
+    document.getElementById('statWins').textContent = data.total_wins;
+    document.getElementById('statKills').textContent = data.total_kills;
+    document.getElementById('statKD').textContent = kd;
+    document.getElementById('statRating').textContent = Math.round(data.rating);
+    document.getElementById('statGames').textContent = data.total_games;
+  }
+}
+
 // Check for existing session
 (async () => {
   const { data: { session } } = await sbClient.auth.getSession();
@@ -99,6 +119,7 @@ authSubmit.addEventListener('click', async () => {
     currentUser = session.user;
     authScreen.style.display = 'none';
     document.getElementById('modeSelect').style.display = 'flex';
+    _populateSidebar();
   }
 })();
 
@@ -303,6 +324,19 @@ window._joinTeam = (teamIndex) => {
 
 window._selectClass = (classId) => {
   socket.emit('selectClass', classId);
+};
+
+window._switchPage = (page) => {
+  document.querySelectorAll('[id^="page-"]').forEach(p => p.style.display = 'none');
+  const target = document.getElementById(`page-${page}`);
+  if (target) target.style.display = 'block';
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+  document.querySelector(`.sidebar-link[data-page="${page}"]`)?.classList.add('active');
+};
+
+window._logout = async () => {
+  await sbClient.auth.signOut();
+  location.reload();
 };
 
 window._voteFillBots = () => {

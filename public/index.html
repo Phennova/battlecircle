@@ -335,6 +335,28 @@
     .mode-btn:nth-child(3) { animation-delay: 0.46s; }
     .mode-btn:nth-child(4) { animation-delay: 0.54s; }
     .mode-btn:nth-child(5) { animation-delay: 0.62s; }
+    /* ═══ SIDEBAR NAV ═══ */
+    .sidebar-link {
+      font-family: var(--font-display);
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      padding: 8px 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+      border-left: 2px solid transparent;
+      margin-bottom: 2px;
+    }
+    .sidebar-link:hover {
+      color: var(--text-primary);
+      background: rgba(255,255,255,0.02);
+    }
+    .sidebar-link.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: var(--accent-glow);
+    }
+
     /* ═══ AUTH SCREEN ═══ */
     #authScreen {
       position: absolute; inset: 0;
@@ -441,83 +463,136 @@
   </div>
 
   <div id="modeSelect" style="display:none">
-    <div class="menu-content">
-      <div class="title-group">
-        <h1>BattleCircle</h1>
-        <div class="tagline">Arena Combat Redefined</div>
-      </div>
-      <div class="divider"></div>
-      <div class="mode-list">
-        <div class="mode-btn" data-mode="battle_royale">
-          <div>
-            <div class="mode-name">Battle Royale</div>
-            <div class="mode-info">Free-for-all, last one standing</div>
-          </div>
-          <div class="mode-players">2-8</div>
+    <div style="display:flex;width:100%;height:100%;position:relative;z-index:1">
+
+      <!-- SIDEBAR -->
+      <div style="width:220px;background:rgba(12,16,28,0.95);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 16px;flex-shrink:0">
+        <div style="font-family:var(--font-display);font-size:16px;font-weight:900;letter-spacing:3px;color:var(--accent);margin-bottom:24px">BATTLECIRCLE</div>
+
+        <div style="font-family:var(--font-display);font-size:8px;letter-spacing:3px;color:var(--text-muted);margin-bottom:8px">PLAYER</div>
+        <div id="sidebarProfile" style="background:var(--accent-glow);padding:10px 12px;border-left:2px solid var(--accent);margin-bottom:24px">
+          <div style="font-family:var(--font-body);font-size:14px;font-weight:600;color:var(--text-primary)" id="sidebarUsername">Player</div>
+          <div style="font-family:var(--font-body);font-size:11px;color:var(--text-dim)" id="sidebarRating">Rating: 1500</div>
         </div>
-        <div class="mode-btn" data-mode="tdm_2v2">
-          <div>
-            <div class="mode-name">Team Deathmatch 2v2</div>
-            <div class="mode-info">Eliminate the enemy team</div>
-          </div>
-          <div class="mode-players">4</div>
+
+        <div style="font-family:var(--font-display);font-size:8px;letter-spacing:3px;color:var(--text-muted);margin-bottom:8px">NAVIGATION</div>
+        <div class="sidebar-nav">
+          <div class="sidebar-link active" data-page="play" onclick="window._switchPage('play')">PLAY</div>
+          <div class="sidebar-link" data-page="leaderboard" onclick="window._switchPage('leaderboard')">LEADERBOARD</div>
+          <div class="sidebar-link" data-page="profile" onclick="window._switchPage('profile')">PROFILE</div>
         </div>
-        <div class="mode-btn" data-mode="tdm_3v3">
-          <div>
-            <div class="mode-name">Team Deathmatch 3v3</div>
-            <div class="mode-info">Eliminate the enemy team</div>
-          </div>
-          <div class="mode-players">6</div>
-        </div>
-        <div class="mode-btn" data-mode="tdm_4v4">
-          <div>
-            <div class="mode-name">Team Deathmatch 4v4</div>
-            <div class="mode-info">Eliminate the enemy team</div>
-          </div>
-          <div class="mode-players">8</div>
-        </div>
-        <div class="mode-btn" data-mode="ctf_3v3">
-          <div>
-            <div class="mode-name">Capture The Flag 3v3</div>
-            <div class="mode-info">Capture and hold the enemy flag</div>
-          </div>
-          <div class="mode-players">6</div>
-        </div>
+
+        <div style="flex:1"></div>
+        <div style="font-family:var(--font-display);font-size:9px;color:var(--text-muted);letter-spacing:1px;cursor:pointer;padding:6px 0" onclick="window._logout()">LOGOUT</div>
+        <div style="font-family:var(--font-display);font-size:8px;color:var(--text-muted);letter-spacing:2px;margin-top:8px;opacity:0.4">V2.0</div>
       </div>
 
-      <div class="divider" style="margin-top:32px"></div>
-      <div class="subtitle" style="margin-bottom:16px;font-size:12px;letter-spacing:4px">ARCADE - VS BOTS</div>
-      <div class="mode-list">
-        <div class="mode-btn" data-mode="arcade_br">
-          <div>
-            <div class="mode-name">Arcade: Battle Royale</div>
-            <div class="mode-info">Battle Royale vs bots</div>
+      <!-- MAIN CONTENT -->
+      <div style="flex:1;background:var(--bg-deep);padding:28px 32px;overflow-y:auto;position:relative" id="mainContent">
+
+        <!-- Play Page (default) -->
+        <div id="page-play">
+          <div style="font-family:var(--font-display);font-size:9px;letter-spacing:4px;color:var(--text-muted);margin-bottom:16px">SELECT MODE</div>
+
+          <!-- Mode Grid -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px">
+            <div class="mode-btn" data-mode="battle_royale" style="border-left:3px solid #ff6b4a">
+              <div>
+                <div class="mode-name" style="color:#ff6b4a">Battle Royale</div>
+                <div class="mode-info">Free-for-all, last one standing</div>
+              </div>
+              <div class="mode-players">2-8</div>
+            </div>
+            <div class="mode-btn" data-mode="tdm_2v2" style="border-left:3px solid #50c878">
+              <div>
+                <div class="mode-name" style="color:#50c878">TDM 2v2</div>
+                <div class="mode-info">Eliminate the enemy team</div>
+              </div>
+              <div class="mode-players">4</div>
+            </div>
+            <div class="mode-btn" data-mode="tdm_3v3" style="border-left:3px solid #50c878">
+              <div>
+                <div class="mode-name" style="color:#50c878">TDM 3v3</div>
+                <div class="mode-info">Eliminate the enemy team</div>
+              </div>
+              <div class="mode-players">6</div>
+            </div>
+            <div class="mode-btn" data-mode="tdm_4v4" style="border-left:3px solid #50c878">
+              <div>
+                <div class="mode-name" style="color:#50c878">TDM 4v4</div>
+                <div class="mode-info">Eliminate the enemy team</div>
+              </div>
+              <div class="mode-players">8</div>
+            </div>
+            <div class="mode-btn" data-mode="ctf_3v3" style="border-left:3px solid #ffc832">
+              <div>
+                <div class="mode-name" style="color:#ffc832">Capture The Flag</div>
+                <div class="mode-info">Capture and hold the enemy flag</div>
+              </div>
+              <div class="mode-players">3v3</div>
+            </div>
           </div>
-          <div class="mode-players">1+7 BOTS</div>
+
+          <!-- Arcade Section -->
+          <div style="font-family:var(--font-display);font-size:9px;letter-spacing:4px;color:var(--text-muted);margin-bottom:12px;margin-top:24px">ARCADE — VS BOTS</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px">
+            <div class="mode-btn" data-mode="arcade_br" style="border-left:3px solid var(--accent)">
+              <div>
+                <div class="mode-name">Arcade: BR</div>
+                <div class="mode-info">Battle Royale vs bots</div>
+              </div>
+              <div class="mode-players">1+7</div>
+            </div>
+            <div class="mode-btn" data-mode="arcade_tdm_2v2" style="border-left:3px solid var(--accent)">
+              <div>
+                <div class="mode-name">Arcade: TDM 2v2</div>
+                <div class="mode-info">Team elimination vs bots</div>
+              </div>
+              <div class="mode-players">1+3</div>
+            </div>
+            <div class="mode-btn" data-mode="arcade_tdm_3v3" style="border-left:3px solid var(--accent)">
+              <div>
+                <div class="mode-name">Arcade: TDM 3v3</div>
+                <div class="mode-info">Team elimination vs bots</div>
+              </div>
+              <div class="mode-players">1+5</div>
+            </div>
+            <div class="mode-btn" data-mode="arcade_ctf" style="border-left:3px solid var(--accent)">
+              <div>
+                <div class="mode-name">Arcade: CTF</div>
+                <div class="mode-info">Capture the Flag vs bots</div>
+              </div>
+              <div class="mode-players">1+5</div>
+            </div>
+          </div>
+
+          <!-- Stats Bar -->
+          <div style="display:flex;gap:24px;padding:14px 16px;background:var(--bg-panel);border-top:1px solid var(--border);margin-top:8px">
+            <div><div style="font-family:var(--font-display);font-size:8px;letter-spacing:2px;color:var(--text-muted)">WINS</div><div style="font-family:var(--font-body);font-size:18px;color:var(--text-primary)" id="statWins">0</div></div>
+            <div><div style="font-family:var(--font-display);font-size:8px;letter-spacing:2px;color:var(--text-muted)">KILLS</div><div style="font-family:var(--font-body);font-size:18px;color:var(--text-primary)" id="statKills">0</div></div>
+            <div><div style="font-family:var(--font-display);font-size:8px;letter-spacing:2px;color:var(--text-muted)">K/D</div><div style="font-family:var(--font-body);font-size:18px;color:var(--text-primary)" id="statKD">0</div></div>
+            <div><div style="font-family:var(--font-display);font-size:8px;letter-spacing:2px;color:var(--text-muted)">RATING</div><div style="font-family:var(--font-body);font-size:18px;color:var(--accent)" id="statRating">1500</div></div>
+            <div><div style="font-family:var(--font-display);font-size:8px;letter-spacing:2px;color:var(--text-muted)">GAMES</div><div style="font-family:var(--font-body);font-size:18px;color:var(--text-primary)" id="statGames">0</div></div>
+          </div>
         </div>
-        <div class="mode-btn" data-mode="arcade_tdm_2v2">
-          <div>
-            <div class="mode-name">Arcade: TDM 2v2</div>
-            <div class="mode-info">Team elimination vs bots</div>
-          </div>
-          <div class="mode-players">1+3 BOTS</div>
+
+        <!-- Leaderboard Page (hidden by default) -->
+        <div id="page-leaderboard" style="display:none">
+          <div style="font-family:var(--font-display);font-size:9px;letter-spacing:4px;color:var(--text-muted);margin-bottom:16px">GLOBAL LEADERBOARD</div>
+          <div id="leaderboardContent" style="font-family:var(--font-body);color:var(--text-dim)">Loading...</div>
         </div>
-        <div class="mode-btn" data-mode="arcade_tdm_3v3">
-          <div>
-            <div class="mode-name">Arcade: TDM 3v3</div>
-            <div class="mode-info">Team elimination vs bots</div>
-          </div>
-          <div class="mode-players">1+5 BOTS</div>
-        </div>
-        <div class="mode-btn" data-mode="arcade_ctf">
-          <div>
-            <div class="mode-name">Arcade: CTF 3v3</div>
-            <div class="mode-info">Capture the Flag vs bots</div>
-          </div>
-          <div class="mode-players">1+5 BOTS</div>
+
+        <!-- Profile Page (hidden by default) -->
+        <div id="page-profile" style="display:none">
+          <div style="font-family:var(--font-display);font-size:9px;letter-spacing:4px;color:var(--text-muted);margin-bottom:16px">YOUR PROFILE</div>
+          <div id="profileContent" style="font-family:var(--font-body);color:var(--text-dim)">Loading...</div>
         </div>
       </div>
-      <div class="version-tag">V2.0</div>
+    </div>
+
+    <!-- Grid background -->
+    <div style="position:absolute;inset:0;pointer-events:none;z-index:0">
+      <div style="position:absolute;inset:-50%;width:200%;height:200%;background-image:linear-gradient(rgba(74,158,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(74,158,255,0.02) 1px,transparent 1px);background-size:60px 60px"></div>
     </div>
   </div>
 
