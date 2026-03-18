@@ -6,6 +6,12 @@ import { PLAYER_RADIUS, PLAYER_SPEED, PLAYER_HP } from '/shared/constants.js';
 import { resolveAgainstWalls } from '/shared/collision.js';
 import { WEAPONS } from '/shared/weapons.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { TouchControls } from './TouchControls.js';
+
+// ═══ MOBILE DETECTION ═══
+const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+if (isMobile) document.body.classList.add('is-mobile');
+window.isMobile = isMobile;
 
 // ═══ AUTH ═══
 const SUPABASE_URL = 'https://tzsqedjxlytvkoxyoepe.supabase.co';
@@ -110,6 +116,11 @@ async function _populateSidebar() {
     document.getElementById('statRating').textContent = Math.round(data.rating);
     document.getElementById('statGames').textContent = data.total_games;
   }
+  // Mobile top bar
+  const mobileUser = document.getElementById('mobileUsername');
+  const mobileRating = document.getElementById('mobileRating');
+  if (mobileUser) mobileUser.textContent = displayName;
+  if (mobileRating && data) mobileRating.textContent = Math.round(data.rating);
 }
 
 // Check for existing session
@@ -137,6 +148,11 @@ const renderer = new Renderer(canvas, ctx);
 const inputHandler = new InputHandler(canvas);
 const shadowCaster = new ShadowCaster();
 const hud = new HUD();
+
+let touchControls = null;
+if (isMobile) {
+  touchControls = new TouchControls(canvas, inputHandler);
+}
 
 // Connect to server
 const socket = io({
@@ -419,6 +435,8 @@ window._switchPage = (page) => {
   if (target) target.style.display = 'block';
   document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
   document.querySelector(`.sidebar-link[data-page="${page}"]`)?.classList.add('active');
+  document.querySelectorAll('.mobile-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.mobile-tab[data-page="${page}"]`)?.classList.add('active');
   if (page === 'leaderboard') _loadLeaderboard();
   if (page === 'profile') _loadProfile();
 };
@@ -473,7 +491,7 @@ async function _loadLeaderboard() {
   });
 
   html += '</tbody></table>';
-  container.innerHTML = html;
+  container.innerHTML = `<div style="overflow-x:auto">${html}</div>`;
 }
 
 function _escapeHtml(str) {
@@ -538,7 +556,7 @@ async function _loadProfile() {
   html += `</div></div>`;
 
   // Stats grid
-  html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px">`;
+  html += `<div style="display:grid;grid-template-columns:repeat(${isMobile ? 2 : 4},1fr);gap:10px;margin-bottom:24px">`;
   const stats = [
     ['KILLS', player.total_kills || 0],
     ['DEATHS', player.total_deaths || 0],
@@ -559,7 +577,7 @@ async function _loadProfile() {
 
   // Per-mode breakdown
   html += `<div style="font-family:var(--font-display);font-size:8px;letter-spacing:3px;color:var(--text-muted);margin-bottom:10px">MODE BREAKDOWN</div>`;
-  html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">`;
+  html += `<div style="display:grid;grid-template-columns:repeat(${isMobile ? 2 : 4},1fr);gap:10px">`;
   const modes = [
     ['BR', player.br_wins || 0, player.br_games || 0],
     ['TDM', player.tdm_wins || 0, player.tdm_games || 0],
@@ -613,9 +631,19 @@ window._voteFillBots = () => {
   socket.emit('voteFillBots');
 };
 
-socket.on('countdown', (data) => {
+socket.on('countdown', async (data) => {
   countdownEnd = Date.now() + data.seconds * 1000;
   lobby.style.display = 'none';
+
+  // Mobile: enter fullscreen and lock landscape
+  if (isMobile) {
+    document.body.classList.add('in-game');
+    try {
+      await document.documentElement.requestFullscreen?.();
+      await screen.orientation?.lock?.('landscape');
+    } catch (e) { /* not all browsers support orientation lock */ }
+    if (touchControls) touchControls.show();
+  }
   if (data.spawnPositions && data.spawnPositions[myId]) {
     predictedX = data.spawnPositions[myId].x;
     predictedY = data.spawnPositions[myId].y;
@@ -787,6 +815,7 @@ socket.on('playerKilled', (data) => {
         if (!gameOverData) {
           overlay.style.display = 'none';
           spectating = true;
+          if (touchControls) touchControls.setSpectating(true);
           const alivePlayers = gameState ? gameState.players.filter(p => p.alive && p.id !== myId) : [];
           if (alivePlayers.length > 0) {
             spectateTargetId = alivePlayers[0].id;
@@ -801,6 +830,10 @@ socket.on('gameOver', (data) => {
   gameOverData = data;
   spectating = false;
   gameActive = false;
+  if (isMobile) {
+    document.body.classList.remove('in-game');
+    if (touchControls) touchControls.hide();
+  }
   const overlay = document.getElementById('overlay');
   overlay.style.display = 'flex';
 
@@ -1042,7 +1075,8 @@ function loop(timestamp) {
       // Set sniper mode
       const isSniper = me.gun && me.gun.type === 'sniper';
       inputHandler.setSniperMode(isSniper);
-      inputHandler.scopeBlocked = onCooldown; // block starting scope during cooldown
+      inputHandler.scopeBlocked = onCooldown;
+      if (touchControls) touchControls.setSniperVisible(isSniper);
 
       // Handle action keys (block during healing/reloading)
       if (!me.healing && !me.reloading) {
@@ -1459,6 +1493,19 @@ function loop(timestamp) {
           const idx = alive.findIndex(p => p.id === spectateTargetId);
           spectateTargetId = alive[(idx + 1) % alive.length].id;
           inputHandler.keys.right = false;
+        }
+        // Mobile spectator navigation
+        if (inputHandler._spectatorPrev) {
+          inputHandler._spectatorPrev = false;
+          const alive = gameState.players.filter(p => p.alive);
+          const idx = alive.findIndex(p => p.id === spectateTargetId);
+          spectateTargetId = alive[(idx - 1 + alive.length) % alive.length].id;
+        }
+        if (inputHandler._spectatorNext) {
+          inputHandler._spectatorNext = false;
+          const alive = gameState.players.filter(p => p.alive);
+          const idx = alive.findIndex(p => p.id === spectateTargetId);
+          spectateTargetId = alive[(idx + 1) % alive.length].id;
         }
         if (inputHandler.shooting) {
           spectating = false;

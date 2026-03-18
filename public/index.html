@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
   <title>BattleCircle</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -490,9 +490,110 @@
       font-family: var(--font-body); font-size: 14px;
       color: var(--text-dim); margin-bottom: 12px;
     }
+    /* ═══ PORTRAIT BLOCKER ═══ */
+    #portraitBlocker {
+      display: none;
+      position: fixed; inset: 0; z-index: 9999;
+      background: var(--bg-deep);
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      font-family: var(--font-display);
+    }
+    #portraitBlocker .rotate-icon {
+      font-size: 48px; margin-bottom: 24px; color: var(--accent);
+      animation: rotate-hint 2s ease-in-out infinite;
+    }
+    #portraitBlocker .rotate-text {
+      font-size: 12px; letter-spacing: 4px;
+      color: var(--text-dim);
+    }
+    @keyframes rotate-hint {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(90deg); }
+    }
+    @media (orientation: portrait) {
+      body.is-mobile.in-game #portraitBlocker { display: flex; }
+    }
+
+    /* ═══ MOBILE ELEMENTS (hidden on desktop) ═══ */
+    #mobileTopBar { display: none; }
+    #mobileTabBar { display: none; }
+
+    /* ═══ MOBILE RESPONSIVE ═══ */
+    @media (max-width: 768px) {
+      .auth-box {
+        width: min(340px, calc(100vw - 32px)) !important;
+        padding: 24px 20px !important;
+      }
+      .auth-input {
+        height: 48px !important;
+        font-size: 16px !important;
+      }
+      .auth-submit {
+        height: 48px !important;
+        font-size: 14px !important;
+      }
+
+      /* Hide desktop sidebar */
+      #modeSelect > div:first-child { display: none !important; }
+
+      /* Mobile top bar */
+      #mobileTopBar {
+        display: flex !important;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        background: rgba(12,16,28,0.95);
+        border-bottom: 1px solid var(--border);
+        position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+        height: 48px;
+      }
+
+      /* Mobile bottom tab bar */
+      #mobileTabBar {
+        display: flex !important;
+        position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+        height: 44px;
+        background: rgba(12,16,28,0.98);
+        border-top: 1px solid var(--border);
+      }
+      .mobile-tab {
+        flex: 1;
+        display: flex; align-items: center; justify-content: center;
+        font-family: var(--font-display);
+        font-size: 9px; letter-spacing: 2px;
+        color: var(--text-dim);
+        cursor: pointer;
+        border-top: 2px solid transparent;
+        transition: all 0.15s;
+      }
+      .mobile-tab.active {
+        color: var(--accent);
+        border-top-color: var(--accent);
+      }
+
+      /* Main content — account for fixed top/bottom bars */
+      #mainContent {
+        padding: 60px 16px 56px 16px !important;
+      }
+
+      /* Mode grid single column */
+      #page-play > div:nth-child(2),
+      #page-play > div:nth-child(4) {
+        grid-template-columns: 1fr !important;
+      }
+
+      /* Leaderboard scroll */
+      .lb-table { font-size: 12px; }
+    }
   </style>
 </head>
 <body>
+  <div id="portraitBlocker">
+    <div class="rotate-icon">&#x21BB;</div>
+    <div class="rotate-text">ROTATE YOUR DEVICE</div>
+  </div>
+
   <canvas id="game"></canvas>
 
   <!-- Auth Screen -->
@@ -516,6 +617,15 @@
   </div>
 
   <div id="modeSelect" style="display:none">
+    <!-- Mobile Top Bar (hidden on desktop) -->
+    <div id="mobileTopBar">
+      <div style="font-family:var(--font-display);font-size:13px;font-weight:900;letter-spacing:2px;color:var(--accent)">BATTLECIRCLE</div>
+      <div style="text-align:right">
+        <div style="font-family:var(--font-body);font-size:13px;color:var(--text-primary)" id="mobileUsername">Player</div>
+        <div style="font-family:var(--font-body);font-size:10px;color:var(--text-dim)" id="mobileRating">1500</div>
+      </div>
+    </div>
+
     <div style="display:flex;width:100%;height:100%;position:relative;z-index:1">
 
       <!-- SIDEBAR -->
@@ -650,6 +760,13 @@
           <div id="profileContent" style="font-family:var(--font-body);color:var(--text-dim)">Loading...</div>
         </div>
       </div>
+    </div>
+
+    <!-- Mobile Bottom Tab Bar (hidden on desktop) -->
+    <div id="mobileTabBar">
+      <div class="mobile-tab active" data-page="play" onclick="window._switchPage('play')">PLAY</div>
+      <div class="mobile-tab" data-page="leaderboard" onclick="window._switchPage('leaderboard')">LEADERBOARD</div>
+      <div class="mobile-tab" data-page="profile" onclick="window._switchPage('profile')">PROFILE</div>
     </div>
 
     <!-- Grid background -->

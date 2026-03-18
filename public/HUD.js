@@ -18,7 +18,9 @@ export class HUD {
     this._drawAmmoReserves(ctx, canvasW, canvasH, me.ammoReserve, me.gun ? me.gun.type : null);
     this._drawAliveCount(ctx, 20, 30, gameState.alivePlayers, gameState.players.length);
     this._drawZoneTimer(ctx, canvasW - 20, 30, gameState.gameElapsedMs, gameState.zone);
-    this._drawKeybindHints(ctx, canvasW - 20, canvasH - 14);
+    if (!window.isMobile) {
+      this._drawKeybindHints(ctx, canvasW - 20, canvasH - 14);
+    }
 
     if (me.reloading) {
       this._drawStatusIndicator(ctx, canvasW, canvasH, 'RELOADING', '#ffc832');
@@ -34,8 +36,8 @@ export class HUD {
 
   drawKillFeed(ctx, canvasW, entries, now) {
     const active = entries.filter(e => now - e.time < 5000);
-    const x = canvasW - 16;
-    let y = 60;
+    const x = window.isMobile ? canvasW / 2 + 80 : canvasW - 16;
+    let y = window.isMobile ? 10 : 60;
 
     ctx.textBaseline = 'top';
     ctx.font = `500 12px ${FONT_BODY}`;
@@ -240,10 +242,10 @@ export class HUD {
   drawMinimap(ctx, canvasW, canvasH, map, playerX, playerY, zone, destroyedWalls, teammates, flags) {
     if (!map) return;
 
-    const SIZE = 140;
+    const SIZE = window.isMobile ? 100 : 140;
     const PADDING = 10;
     const mx = PADDING;
-    const my = canvasH - SIZE - PADDING - 70;
+    const my = canvasH - SIZE - PADDING - (window.isMobile ? 10 : 70);
     const scale = SIZE / map.width;
     const destroyed = destroyedWalls ? new Set(destroyedWalls) : new Set();
 
