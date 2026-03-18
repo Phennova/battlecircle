@@ -363,6 +363,7 @@ export class GameRoom {
           if (!tooClose) {
             player.x = sp.x;
             player.y = sp.y;
+            this._ensureWalkableSpawn(player);
             return;
           }
         }
@@ -387,8 +388,22 @@ export class GameRoom {
         }
         player.x = best.x;
         player.y = best.y;
-        assigned.push({ x: best.x, y: best.y });
+        // Validate spawn is on walkable cell, adjust if not
+        this._ensureWalkableSpawn(player);
+        assigned.push({ x: player.x, y: player.y });
       });
+    }
+  }
+
+  _ensureWalkableSpawn(player) {
+    const cell = this.navGrid.worldToCell(player.x, player.y);
+    if (!this.navGrid.isWalkable(cell.c, cell.r)) {
+      const nearest = this.navGrid._findNearestWalkable(cell.c, cell.r);
+      if (nearest) {
+        const wp = this.navGrid.cellToWorld(nearest.c, nearest.r);
+        player.x = wp.x;
+        player.y = wp.y;
+      }
     }
   }
 
@@ -488,6 +503,7 @@ export class GameRoom {
 
       // Create AI controller
       const ai = new BotAI(bot, this);
+      bot._ai = ai; // back-reference for behaviors to access AI state
       this.bots.push(ai);
 
       // Assign CTF roles

@@ -535,6 +535,14 @@ export class BotAI {
         this.currentPath = [];
         this.pathRecalcTimer = 0;
 
+        // Blacklist current position so bot doesn't path back here
+        if (!this._blacklistedPositions) this._blacklistedPositions = [];
+        this._blacklistedPositions.push({ x: bot.x, y: bot.y, t: Date.now() });
+        // Keep only last 5 blacklisted positions, expire after 30s
+        this._blacklistedPositions = this._blacklistedPositions
+          .filter(bp => Date.now() - bp.t < 30000)
+          .slice(-5);
+
         // Clear all goals including committed goal
         bot._lootPatrolGoal = null;
         bot._huntGoal = null;
@@ -542,11 +550,11 @@ export class BotAI {
         this._committedGoal = null;
         this.currentBehavior = null;
 
-        if (this.stuckCount > 4) {
-          // Head toward map center
+        if (this.stuckCount > 2) {
+          // Head toward map center after just 2 failures (was 4)
           this.stuckCount = 0;
-          const centerX = this.room.map.width / 2 + (Math.random() - 0.5) * 300;
-          const centerY = this.room.map.height / 2 + (Math.random() - 0.5) * 300;
+          const centerX = this.room.map.width / 2 + (Math.random() - 0.5) * 400;
+          const centerY = this.room.map.height / 2 + (Math.random() - 0.5) * 400;
           bot._lootPatrolGoal = { x: centerX, y: centerY };
           bot._huntGoal = { x: centerX, y: centerY };
         }

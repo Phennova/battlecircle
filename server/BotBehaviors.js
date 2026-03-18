@@ -123,12 +123,18 @@ function lootWeaponUnarmed(bot, ctx) {
     if (!bot._lootPatrolGoal || distSq(bot, bot._lootPatrolGoal) < 3600) {
       const buildings = ctx.buildings || [];
       if (buildings.length > 0) {
-        // Pick the nearest building to THIS bot (so each bot goes to different ones)
+        // Pick nearest building, skipping ones near blacklisted positions
+        const blacklist = bot._ai?._blacklistedPositions || [];
         let nearestB = buildings[0];
         let nearestD = Infinity;
         for (const b of buildings) {
           const bx = b.x + b.w / 2;
           const by = b.y + b.h / 2;
+          // Skip if near a blacklisted position
+          const isBlacklisted = blacklist.some(bp =>
+            (bx - bp.x) ** 2 + (by - bp.y) ** 2 < 10000 // 100px radius
+          );
+          if (isBlacklisted) continue;
           const d = (bx - bot.x) ** 2 + (by - bot.y) ** 2;
           if (d < nearestD) { nearestD = d; nearestB = b; }
         }
