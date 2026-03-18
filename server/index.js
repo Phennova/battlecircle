@@ -7,6 +7,7 @@ import { GameRoom } from './GameRoom.js';
 import { generateMap } from './mapGenerator.js';
 import { GAME_MODES } from '../shared/gameModes.js';
 import { verifyToken, getOrCreatePlayer } from './supabase.js';
+import { Matchmaker } from './matchmaking.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,28 +19,28 @@ const io = new Server(httpServer);
 app.use('/shared', express.static(join(__dirname, '..', 'shared')));
 app.use(express.static(join(__dirname, '..', 'public')));
 
-// Room management — one waiting room per mode
+// Room management
 const rooms = new Map(); // roomId -> GameRoom
-const waitingRooms = new Map(); // modeId -> roomId
+const waitingRooms = new Map(); // modeId -> roomId (for arcade only now)
+const matchmaker = new Matchmaker(io, rooms);
 
-function getOrCreateRoom(modeId) {
+// Arcade modes still use direct room join (no matchmaking)
+function getOrCreateArcadeRoom(modeId) {
   const mode = GAME_MODES[modeId];
-  if (!mode) return null;
+  if (!mode || !mode.arcade) return null;
 
-  // Check for existing waiting room for this mode
   const existingId = waitingRooms.get(modeId);
   if (existingId) {
     const room = rooms.get(existingId);
     if (room && !room.isFull && room.state === 'WAITING') {
       return room;
     }
-    // Room is full or started, clear it
     waitingRooms.delete(modeId);
   }
 
   const id = `${modeId}_${Date.now()}`;
   const mapData = generateMap(modeId);
-  console.log(`[${modeId}] New room ${id}: ${mapData.buildings.length} buildings`);
+  console.log(`[${modeId}] New arcade room ${id}: ${mapData.buildings.length} buildings`);
   const room = new GameRoom(id, mapData, io, modeId);
   rooms.set(id, room);
   waitingRooms.set(modeId, id);
@@ -50,7 +51,6 @@ function cleanupRooms() {
   rooms.forEach((room, id) => {
     if (room.isEmpty && room.state !== 'WAITING') {
       rooms.delete(id);
-      // Clear waiting room ref if it points to this room
       waitingRooms.forEach((roomId, modeId) => {
         if (roomId === id) waitingRooms.delete(modeId);
       });
@@ -71,7 +71,6 @@ io.on('connection', async (socket) => {
       const user = await verifyToken(authToken);
       if (user) {
         socket.supabaseId = user.id;
-        // Ensure player profile exists
         await getOrCreatePlayer(user.id, authUsername || user.email?.split('@')[0] || 'Player');
       }
     } catch (e) {
@@ -81,23 +80,67 @@ io.on('connection', async (socket) => {
 
   console.log(`Player connected: ${socket.id} (${authUsername || 'guest'}) supabaseId:${socket.supabaseId || 'none'}`);
 
+  // Matchmaking queue (for competitive modes)
+  socket.on('joinQueue', async (modeId) => {
+    if (!GAME_MODES[modeId]) {
+      socket.emit('queueError', { message: 'Invalid game mode' });
+      return;
+    }
+
+    const mode = GAME_MODES[modeId];
+
+    // Arcade modes bypass queue
+    if (mode.arcade) {
+      const room = getOrCreateArcadeRoom(modeId);
+      if (!room) {
+        socket.emit('error', { message: 'Could not create room' });
+        return;
+      }
+      room.addPlayer(socket);
+      return;
+    }
+
+    await matchmaker.addToQueue(socket, modeId);
+  });
+
+  // Legacy direct join (still works for arcade)
   socket.on('joinMode', (modeId) => {
     if (!GAME_MODES[modeId]) {
       socket.emit('error', { message: 'Invalid game mode' });
       return;
     }
 
-    const room = getOrCreateRoom(modeId);
-    if (!room) {
-      socket.emit('error', { message: 'Could not create room' });
-      return;
-    }
+    const mode = GAME_MODES[modeId];
 
-    room.addPlayer(socket);
+    if (mode.arcade) {
+      const room = getOrCreateArcadeRoom(modeId);
+      if (!room) {
+        socket.emit('error', { message: 'Could not create room' });
+        return;
+      }
+      room.addPlayer(socket);
+    } else {
+      // Redirect non-arcade to queue
+      matchmaker.addToQueue(socket, modeId);
+    }
+  });
+
+  socket.on('leaveQueue', () => {
+    matchmaker.removeFromQueue(socket.id);
+    socket.emit('queueLeft');
   });
 
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${socket.id}`);
+    matchmaker.removeFromQueue(socket.id);
+
+    // Check if player was in a countdown room (dodge detection)
+    rooms.forEach(room => {
+      if (room.state === 'COUNTDOWN' && room.players.has(socket.id)) {
+        matchmaker.recordDodge(socket.id);
+      }
+    });
+
     cleanupRooms();
   });
 });

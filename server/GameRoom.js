@@ -8,6 +8,8 @@ import { resolveAgainstWalls } from '../shared/collision.js';
 import { PLAYER_RADIUS, BULLET_RADIUS, PICKUP_RANGE, TICK_INTERVAL } from '../shared/constants.js';
 import { WEAPONS, AMMO_TYPES } from '../shared/weapons.js';
 import { GAME_MODES, CTF_CLASSES } from '../shared/gameModes.js';
+import { recordMatch, getPlayerProfile, updateRating } from './supabase.js';
+import { calculateBRRatings, calculateTeamRatings } from './glicko2.js';
 
 const STATES = { WAITING: 'WAITING', COUNTDOWN: 'COUNTDOWN', ACTIVE: 'ACTIVE', ENDED: 'ENDED' };
 
@@ -673,6 +675,15 @@ export class GameRoom {
       this._spawnBots();
     }
 
+    // Bot backfill for matchmade games
+    if (this._pendingBotBackfill > 0) {
+      const origBotCount = this.mode.botCount;
+      this.mode.botCount = this._pendingBotBackfill;
+      this._spawnBots();
+      this.mode.botCount = origBotCount;
+      this._pendingBotBackfill = 0;
+    }
+
     // Re-assign spawn positions now that teams are finalized
     this._assignSpawnPositions();
 
@@ -1298,6 +1309,7 @@ export class GameRoom {
             teamScores: this.ctfTimers.map(t => Math.round(t)),
             standings
           });
+          this._recordMatchToDatabase(winningTeam, null);
           return;
         }
 
@@ -1485,6 +1497,7 @@ export class GameRoom {
             teamScores: [teamAlive[0], teamAlive[1]],
             standings
           });
+          this._recordMatchToDatabase(winningTeam, null);
           return;
         }
       }
@@ -1510,6 +1523,7 @@ export class GameRoom {
             teamScores: this.teamScores,
             standings
           });
+          this._recordMatchToDatabase(winningTeam, null);
           return;
         }
       }
@@ -1536,7 +1550,141 @@ export class GameRoom {
         winnerId: winner ? winner.id : null,
         standings
       });
+      this._recordMatchToDatabase(null, winner ? winner.id : null);
     }
+  }
+
+  _recordMatchToDatabase(winningTeam, winnerId) {
+    // Arcade modes: no recording, no ratings
+    if (this.mode.arcade) return;
+
+    const durationMs = this.gameStartTime ? Date.now() - this.gameStartTime : 0;
+    const isTeamMode = winningTeam != null;
+    const hasBots = this.bots.length > 0;
+
+    const humanPlayers = [];
+    this.players.forEach(player => {
+      if (!player.supabaseId) return;
+
+      let won = false;
+      if (isTeamMode) {
+        const playerTeamColor = TEAM_COLORS[player.team];
+        won = playerTeamColor === winningTeam;
+      } else if (winnerId != null) {
+        won = player.id === winnerId;
+      }
+
+      humanPlayers.push({ player, won });
+    });
+
+    // Collect bot data for rating calculations (bots = 1100 rating)
+    const botPlayers = [];
+    this.players.forEach(player => {
+      if (player.supabaseId) return; // skip humans
+      let won = false;
+      if (isTeamMode) {
+        const playerTeamColor = TEAM_COLORS[player.team];
+        won = playerTeamColor === winningTeam;
+      } else if (winnerId != null) {
+        won = player.id === winnerId;
+      }
+      botPlayers.push({ player, won });
+    });
+
+    if (humanPlayers.length === 0) return;
+
+    this._processRatingsAndRecord(humanPlayers, botPlayers, durationMs, isTeamMode, hasBots).catch(err => {
+      console.error(`[${this.id}] Failed to record match:`, err.message);
+    });
+  }
+
+  async _processRatingsAndRecord(humanPlayers, botPlayers, durationMs, isTeamMode, hasBots) {
+    // Fetch current ratings from DB for all human players
+    const ratingInputs = [];
+    for (const { player, won } of humanPlayers) {
+      const profile = await getPlayerProfile(player.supabaseId);
+      ratingInputs.push({
+        supabaseId: player.supabaseId,
+        socketId: player.id,
+        placement: player.placement || 0,
+        kills: player.kills,
+        deaths: player.deaths,
+        damageDealt: Math.round(player.damageDealt),
+        team: player.team != null ? TEAM_COLORS[player.team] : null,
+        won,
+        rating: profile?.rating || 1500,
+        rd: profile?.rating_deviation || 350,
+        vol: profile?.rating_volatility || 0.06
+      });
+    }
+
+    // Add bots as rating opponents (fixed 1100 rating, high RD)
+    const allForRating = [...ratingInputs];
+    for (const { player, won } of botPlayers) {
+      allForRating.push({
+        supabaseId: `bot_${player.id}`,
+        socketId: player.id,
+        placement: player.placement || 0,
+        kills: player.kills,
+        deaths: player.deaths,
+        damageDealt: Math.round(player.damageDealt),
+        team: player.team != null ? TEAM_COLORS[player.team] : null,
+        won,
+        rating: 1100,
+        rd: 350,
+        vol: 0.06
+      });
+    }
+
+    // Calculate new ratings (including bots as opponents)
+    let newRatings;
+    if (isTeamMode) {
+      newRatings = calculateTeamRatings(allForRating);
+    } else {
+      newRatings = calculateBRRatings(allForRating);
+    }
+
+    // Build results for humans only (bots don't go in DB)
+    const playerResults = ratingInputs.map(p => {
+      const nr = newRatings.get(p.supabaseId);
+      return {
+        playerId: p.supabaseId,
+        placement: p.placement,
+        kills: p.kills,
+        deaths: p.deaths,
+        damageDealt: p.damageDealt,
+        team: p.team,
+        won: p.won,
+        ratingBefore: Math.round(p.rating),
+        ratingAfter: nr ? nr.rating : Math.round(p.rating)
+      };
+    });
+
+    // Record match + update aggregate stats
+    await recordMatch(this.modeId, durationMs, playerResults);
+
+    // Update each human player's rating in DB
+    for (const p of ratingInputs) {
+      const nr = newRatings.get(p.supabaseId);
+      if (nr) {
+        await updateRating(p.supabaseId, nr.rating, nr.rd, nr.vol);
+      }
+    }
+
+    // Emit rating changes to clients (with match quality indicator)
+    const ratingChanges = {};
+    for (const p of ratingInputs) {
+      const nr = newRatings.get(p.supabaseId);
+      if (nr) {
+        ratingChanges[p.socketId] = {
+          before: Math.round(p.rating),
+          after: nr.rating,
+          delta: nr.rating - Math.round(p.rating),
+          hasBots
+        };
+      }
+    }
+    this.io.to(this.id).emit('ratingUpdate', ratingChanges);
   }
 
   _pointToLineDist(px, py, x1, y1, x2, y2) {

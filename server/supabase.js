@@ -111,10 +111,14 @@ export async function getLeaderboard(type = 'overall', limit = 50) {
 /**
  * Update player rating after a match.
  */
-export async function updateRating(playerId, newRating, newDeviation) {
+export async function updateRating(playerId, newRating, newDeviation, newVolatility) {
   await supabase
     .from('players')
-    .update({ rating: newRating, rating_deviation: newDeviation })
+    .update({
+      rating: newRating,
+      rating_deviation: newDeviation,
+      rating_volatility: newVolatility
+    })
     .eq('id', playerId);
 }
 

@@ -208,40 +208,127 @@ const modeSelect = document.getElementById('modeSelect');
 const modeLabel = document.getElementById('modeLabel');
 let currentMode = null;
 
+function _joinMode(btn) {
+  const modeId = btn.dataset.mode;
+  if (!modeId || currentMode) return;
+  currentMode = modeId;
+  const nameEl = btn.querySelector('.mode-name');
+  const modeName = nameEl ? nameEl.textContent : modeId;
+  modeLabel.textContent = modeName;
+  const isArcade = modeId.startsWith('arcade_');
+
+  if (isArcade) {
+    // Arcade: direct join, show lobby immediately
+    modeSelect.style.display = 'none';
+    lobby.style.display = 'flex';
+    socket.emit('joinMode', modeId);
+  } else {
+    // Competitive: show queue screen
+    modeSelect.style.display = 'none';
+    _showQueueScreen(modeName);
+    socket.emit('joinQueue', modeId);
+  }
+}
+
 document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const modeId = btn.dataset.mode;
-    if (!modeId) return;
-    currentMode = modeId;
-    modeSelect.style.display = 'none';
-    lobby.style.display = 'flex';
-    const nameEl = btn.querySelector('.mode-name');
-    modeLabel.textContent = nameEl ? nameEl.textContent : modeId;
-    socket.emit('joinMode', modeId);
+    _joinMode(btn);
   });
 });
 
-// Fallback: also listen on document for mode-btn clicks (in case event delegation is needed)
+// Fallback: also listen on document for mode-btn clicks
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.mode-btn');
   if (btn && modeSelect.style.display !== 'none') {
-    const modeId = btn.dataset.mode;
-    if (!modeId || currentMode) return;
-    currentMode = modeId;
-    modeSelect.style.display = 'none';
-    lobby.style.display = 'flex';
-    const nameEl = btn.querySelector('.mode-name');
-    modeLabel.textContent = nameEl ? nameEl.textContent : modeId;
-    socket.emit('joinMode', modeId);
+    _joinMode(btn);
   }
 });
 
 document.getElementById('backBtn').addEventListener('click', () => {
+  // If in queue, leave it
+  if (document.getElementById('queueScreen')?.style.display === 'flex') {
+    socket.emit('leaveQueue');
+  }
   location.reload();
 });
 let isReady = false;
 let currentModeConfig = null;
+let queueTimer = null;
+
+function _showQueueScreen(modeName) {
+  let screen = document.getElementById('queueScreen');
+  if (!screen) {
+    screen = document.createElement('div');
+    screen.id = 'queueScreen';
+    screen.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(6,8,16,0.95);z-index:20';
+    document.body.appendChild(screen);
+  }
+  screen.style.display = 'flex';
+  screen.innerHTML = `
+    <div style="font-family:var(--font-display);font-size:9px;letter-spacing:4px;color:var(--text-muted);margin-bottom:8px">MATCHMAKING</div>
+    <div style="font-family:var(--font-display);font-size:20px;color:var(--accent);letter-spacing:3px;margin-bottom:24px">${modeName}</div>
+    <div id="queueTimerDisplay" style="font-family:var(--font-display);font-size:36px;color:var(--text-primary);margin-bottom:8px">0:00</div>
+    <div id="queueInfo" style="font-family:var(--font-body);font-size:14px;color:var(--text-dim);margin-bottom:8px">Searching for players...</div>
+    <div id="queueRange" style="font-family:var(--font-body);font-size:12px;color:var(--text-muted);margin-bottom:32px"></div>
+    <button id="cancelQueueBtn" style="padding:10px 32px;font-family:var(--font-display);font-size:10px;letter-spacing:2px;background:transparent;color:var(--text-dim);border:1px solid var(--border);cursor:pointer">CANCEL</button>
+  `;
+  document.getElementById('cancelQueueBtn').addEventListener('click', () => {
+    socket.emit('leaveQueue');
+    _hideQueueScreen();
+    currentMode = null;
+    modeSelect.style.display = 'flex';
+  });
+
+  // Start timer
+  const startTime = Date.now();
+  clearInterval(queueTimer);
+  queueTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const min = Math.floor(elapsed / 60);
+    const sec = String(elapsed % 60).padStart(2, '0');
+    const el = document.getElementById('queueTimerDisplay');
+    if (el) el.textContent = `${min}:${sec}`;
+  }, 1000);
+}
+
+function _hideQueueScreen() {
+  clearInterval(queueTimer);
+  const screen = document.getElementById('queueScreen');
+  if (screen) screen.style.display = 'none';
+}
+
+// Queue events
+socket.on('queueJoined', (data) => {
+  const rangeEl = document.getElementById('queueRange');
+  if (rangeEl) rangeEl.textContent = `Rating range: ±${data.ratingRange}`;
+});
+
+socket.on('queueStatus', (data) => {
+  const infoEl = document.getElementById('queueInfo');
+  const rangeEl = document.getElementById('queueRange');
+  if (infoEl) infoEl.textContent = `${data.playersInQueue} player${data.playersInQueue !== 1 ? 's' : ''} in queue — ${data.estimatedWait}`;
+  if (rangeEl) rangeEl.textContent = `Rating range: ±${data.ratingRange}`;
+});
+
+socket.on('queueError', (data) => {
+  _hideQueueScreen();
+  currentMode = null;
+  modeSelect.style.display = 'flex';
+  alert(data.message);
+});
+
+socket.on('queueLeft', () => {
+  _hideQueueScreen();
+});
+
+socket.on('matchFound', (data) => {
+  _hideQueueScreen();
+  // Show lobby
+  lobby.style.display = 'flex';
+  const label = data.hasBots ? `${modeLabel.textContent} (Bot Fill)` : modeLabel.textContent;
+  modeLabel.textContent = label;
+});
 
 readyBtn.addEventListener('click', () => {
   isReady = !isReady;
@@ -332,7 +419,190 @@ window._switchPage = (page) => {
   if (target) target.style.display = 'block';
   document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
   document.querySelector(`.sidebar-link[data-page="${page}"]`)?.classList.add('active');
+  if (page === 'leaderboard') _loadLeaderboard();
+  if (page === 'profile') _loadProfile();
 };
+
+// ═══ LEADERBOARD ═══
+let _lbType = 'overall';
+let _lbLastFetched = null;
+
+async function _loadLeaderboard() {
+  const container = document.getElementById('leaderboardContent');
+  const updatedEl = document.getElementById('leaderboardUpdated');
+  container.innerHTML = '<div class="lb-loading">Loading...</div>';
+
+  const view = _lbType === 'kills' ? 'leaderboard_kills' : 'leaderboard_overall';
+  const { data, error } = await sbClient.from(view).select('*').limit(50);
+
+  if (error || !data) {
+    container.innerHTML = '<div class="lb-loading">Failed to load leaderboard</div>';
+    return;
+  }
+
+  if (data.length === 0) {
+    container.innerHTML = '<div class="lb-loading">No players yet. Play some games!</div>';
+    return;
+  }
+
+  _lbLastFetched = Date.now();
+  if (updatedEl) updatedEl.textContent = 'Just now';
+
+  const myId = currentUser?.id;
+  let html = '<table class="lb-table"><thead><tr>';
+  html += '<th>#</th><th>NAME</th><th>RATING</th><th>WINS</th><th>KILLS</th><th>K/D</th><th>GAMES</th>';
+  html += '</tr></thead><tbody>';
+
+  data.forEach((row, i) => {
+    const rank = i + 1;
+    const rankClass = rank <= 3 ? ` lb-rank-${rank}` : '';
+    const selfClass = row.id === myId ? ' lb-self' : '';
+    const kd = row.total_deaths > 0
+      ? (row.total_kills / row.total_deaths).toFixed(1)
+      : row.total_kills || 0;
+
+    html += `<tr class="${rankClass}${selfClass}">`;
+    html += `<td><span class="lb-rank-num">${rank}</span></td>`;
+    html += `<td>${_escapeHtml(row.username || 'Unknown')}</td>`;
+    html += `<td>${Math.round(row.rating || 1500)}</td>`;
+    html += `<td>${row.total_wins || 0}</td>`;
+    html += `<td>${row.total_kills || 0}</td>`;
+    html += `<td>${kd}</td>`;
+    html += `<td>${row.total_games || 0}</td>`;
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function _escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// Leaderboard tab switching
+document.querySelectorAll('.lb-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.lb-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    _lbType = tab.dataset.lb;
+    _loadLeaderboard();
+  });
+});
+
+// Update "last fetched" timestamp
+setInterval(() => {
+  if (!_lbLastFetched) return;
+  const el = document.getElementById('leaderboardUpdated');
+  if (!el) return;
+  const secs = Math.round((Date.now() - _lbLastFetched) / 1000);
+  if (secs < 5) el.textContent = 'Just now';
+  else if (secs < 60) el.textContent = `${secs}s ago`;
+  else el.textContent = `${Math.round(secs / 60)}m ago`;
+}, 5000);
+
+// ═══ PROFILE ═══
+async function _loadProfile() {
+  const container = document.getElementById('profileContent');
+  if (!currentUser) {
+    container.innerHTML = '<div class="lb-loading">Sign in to view your profile</div>';
+    return;
+  }
+  container.innerHTML = '<div class="lb-loading">Loading...</div>';
+
+  const { data: player } = await sbClient.from('players').select('*').eq('id', currentUser.id).single();
+  if (!player) {
+    container.innerHTML = '<div class="lb-loading">No profile found</div>';
+    return;
+  }
+
+  const kd = player.total_deaths > 0 ? (player.total_kills / player.total_deaths).toFixed(2) : player.total_kills;
+  const winRate = player.total_games > 0 ? ((player.total_wins / player.total_games) * 100).toFixed(1) : 0;
+  const rating = Math.round(player.rating || 1500);
+  let tier = 'Bronze';
+  if (rating >= 2100) tier = 'Diamond';
+  else if (rating >= 1800) tier = 'Platinum';
+  else if (rating >= 1500) tier = 'Gold';
+  else if (rating >= 1200) tier = 'Silver';
+
+  const tierColors = { Bronze: '#cd7f32', Silver: '#c0c0c0', Gold: '#ffd700', Platinum: '#4a9eff', Diamond: '#b44aff' };
+
+  let html = '';
+  // Header
+  html += `<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">`;
+  html += `<div>`;
+  html += `<div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--text-primary)">${_escapeHtml(player.username)}</div>`;
+  html += `<div style="font-family:var(--font-display);font-size:11px;letter-spacing:2px;color:${tierColors[tier]};margin-top:4px">${tier} - ${rating}</div>`;
+  html += `</div></div>`;
+
+  // Stats grid
+  html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px">`;
+  const stats = [
+    ['KILLS', player.total_kills || 0],
+    ['DEATHS', player.total_deaths || 0],
+    ['K/D', kd],
+    ['WIN RATE', `${winRate}%`],
+    ['WINS', player.total_wins || 0],
+    ['GAMES', player.total_games || 0],
+    ['DAMAGE', player.total_damage_dealt || 0],
+    ['BEST GAME', `${player.highest_kill_game || 0} kills`]
+  ];
+  for (const [label, val] of stats) {
+    html += `<div style="background:rgba(255,255,255,0.02);padding:10px 12px;border-left:2px solid var(--border)">`;
+    html += `<div style="font-family:var(--font-display);font-size:8px;letter-spacing:2px;color:var(--text-muted)">${label}</div>`;
+    html += `<div style="font-family:var(--font-body);font-size:18px;color:var(--text-primary);margin-top:2px">${val}</div>`;
+    html += `</div>`;
+  }
+  html += `</div>`;
+
+  // Per-mode breakdown
+  html += `<div style="font-family:var(--font-display);font-size:8px;letter-spacing:3px;color:var(--text-muted);margin-bottom:10px">MODE BREAKDOWN</div>`;
+  html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">`;
+  const modes = [
+    ['BR', player.br_wins || 0, player.br_games || 0],
+    ['TDM', player.tdm_wins || 0, player.tdm_games || 0],
+    ['CTF', player.ctf_wins || 0, player.ctf_games || 0],
+    ['ARCADE', '-', player.arcade_games || 0]
+  ];
+  for (const [mode, wins, games] of modes) {
+    html += `<div style="background:rgba(255,255,255,0.02);padding:10px 12px;border-left:2px solid var(--border)">`;
+    html += `<div style="font-family:var(--font-display);font-size:8px;letter-spacing:2px;color:var(--text-muted)">${mode}</div>`;
+    html += `<div style="font-family:var(--font-body);font-size:14px;color:var(--text-primary);margin-top:2px">${wins === '-' ? '' : `${wins}W `}${games}G</div>`;
+    html += `</div>`;
+  }
+  html += `</div>`;
+
+  // Match history
+  html += `<div style="font-family:var(--font-display);font-size:8px;letter-spacing:3px;color:var(--text-muted);margin:24px 0 10px">RECENT MATCHES</div>`;
+  const { data: matches } = await sbClient
+    .from('match_results')
+    .select('*, matches(mode, started_at, duration_ms)')
+    .eq('player_id', currentUser.id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (matches && matches.length > 0) {
+    for (const m of matches) {
+      const mode = m.matches?.mode || '?';
+      const resultColor = m.won ? '#50c878' : '#ff4a4a';
+      const resultText = m.won ? 'WIN' : 'LOSS';
+      const date = m.matches?.started_at ? new Date(m.matches.started_at).toLocaleDateString() : '';
+      html += `<div style="display:flex;align-items:center;gap:12px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.03)">`;
+      html += `<div style="font-family:var(--font-display);font-size:9px;letter-spacing:1px;color:${resultColor};width:36px">${resultText}</div>`;
+      html += `<div style="font-family:var(--font-body);font-size:13px;color:var(--text-dim);width:80px">${mode}</div>`;
+      html += `<div style="font-family:var(--font-body);font-size:13px;color:var(--text-primary)">${m.kills}K / ${m.deaths}D / ${m.damage_dealt}dmg</div>`;
+      html += `<div style="flex:1"></div>`;
+      html += `<div style="font-family:var(--font-body);font-size:11px;color:var(--text-muted)">${date}</div>`;
+      html += `</div>`;
+    }
+  } else {
+    html += `<div style="font-family:var(--font-body);font-size:13px;color:var(--text-dim);padding:16px 0">No matches played yet</div>`;
+  }
+
+  container.innerHTML = html;
+}
 
 window._logout = async () => {
   await sbClient.auth.signOut();
@@ -594,9 +864,28 @@ socket.on('gameOver', (data) => {
 
   overlay.innerHTML = `
     ${title}
+    <div id="ratingChange" style="font-family:Orbitron,sans-serif;font-size:14px;letter-spacing:2px;margin-bottom:12px;min-height:24px"></div>
     ${leaderboardHTML}
     <button onclick="location.reload()" style="margin-top:12px;padding:14px 40px;font-family:Orbitron,sans-serif;font-size:12px;letter-spacing:3px;background:transparent;color:#4a9eff;border:2px solid rgba(74,158,255,0.4);cursor:pointer;text-transform:uppercase">Play Again</button>
   `;
+});
+
+socket.on('ratingUpdate', (changes) => {
+  const myChange = changes[myId];
+  if (!myChange) return;
+
+  const el = document.getElementById('ratingChange');
+  if (!el) return;
+
+  const delta = myChange.delta;
+  const sign = delta >= 0 ? '+' : '';
+  const color = delta >= 0 ? '#50c878' : '#ff4a4a';
+  const botTag = myChange.hasBots ? ' <span style="color:var(--text-muted,#333a50);font-size:10px;letter-spacing:1px">BOT MATCH</span>' : '';
+
+  el.innerHTML = `<span style="color:var(--text-dim,#5a6480)">${myChange.before}</span> <span style="color:${color}">${sign}${delta}</span> <span style="color:var(--text-primary,#e0e6f0)">${myChange.after}</span>${botTag}`;
+
+  // Refresh sidebar stats
+  _populateSidebar();
 });
 
 // Input sending

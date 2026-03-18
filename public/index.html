@@ -357,6 +357,59 @@
       background: var(--accent-glow);
     }
 
+    /* ═══ LEADERBOARD ═══ */
+    .lb-tabs {
+      display: flex; gap: 0; margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .lb-tab {
+      font-family: var(--font-display);
+      font-size: 9px; letter-spacing: 2px;
+      color: var(--text-dim); padding: 8px 16px;
+      cursor: pointer; transition: all 0.15s;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .lb-tab:hover { color: var(--text-primary); }
+    .lb-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .lb-table {
+      width: 100%; border-collapse: collapse;
+    }
+    .lb-table th {
+      font-family: var(--font-display);
+      font-size: 8px; letter-spacing: 2px;
+      color: var(--text-muted); padding: 8px 10px;
+      text-align: left; border-bottom: 1px solid var(--border);
+    }
+    .lb-table td {
+      font-family: var(--font-body);
+      font-size: 14px; color: var(--text-primary);
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .lb-table tr:nth-child(even) td {
+      background: rgba(255,255,255,0.015);
+    }
+    .lb-table tr.lb-self td {
+      border-left: 2px solid var(--accent);
+      background: var(--accent-glow);
+    }
+    .lb-table tr.lb-rank-1 td:first-child { color: #ffd700; }
+    .lb-table tr.lb-rank-2 td:first-child { color: #c0c0c0; }
+    .lb-table tr.lb-rank-3 td:first-child { color: #cd7f32; }
+    .lb-rank-num {
+      font-family: var(--font-display);
+      font-size: 12px; font-weight: 700;
+    }
+    .lb-loading {
+      text-align: center; padding: 40px;
+      font-family: var(--font-body); font-size: 14px;
+      color: var(--text-dim);
+    }
+
     /* ═══ AUTH SCREEN ═══ */
     #authScreen {
       position: absolute; inset: 0;
@@ -578,8 +631,17 @@
 
         <!-- Leaderboard Page (hidden by default) -->
         <div id="page-leaderboard" style="display:none">
-          <div style="font-family:var(--font-display);font-size:9px;letter-spacing:4px;color:var(--text-muted);margin-bottom:16px">GLOBAL LEADERBOARD</div>
-          <div id="leaderboardContent" style="font-family:var(--font-body);color:var(--text-dim)">Loading...</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div style="font-family:var(--font-display);font-size:9px;letter-spacing:4px;color:var(--text-muted)">GLOBAL LEADERBOARD</div>
+            <div id="leaderboardUpdated" style="font-family:var(--font-body);font-size:11px;color:var(--text-muted)"></div>
+          </div>
+          <div class="lb-tabs">
+            <div class="lb-tab active" data-lb="overall">OVERALL</div>
+            <div class="lb-tab" data-lb="kills">KILLS</div>
+          </div>
+          <div id="leaderboardContent" style="font-family:var(--font-body);color:var(--text-dim)">
+            <div class="lb-loading">Loading...</div>
+          </div>
         </div>
 
         <!-- Profile Page (hidden by default) -->
