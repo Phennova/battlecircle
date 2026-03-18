@@ -403,6 +403,25 @@ export class BotAI {
 
     if ((this.pathRecalcTimer <= 0 || goalChanged || this.currentPath.length === 0) && navGrid) {
       this.currentPath = navGrid.findPath(bot.x, bot.y, goalX, goalY, this._getActiveDangerCells());
+
+      // Track consecutive path failures — if A* fails 3 times for similar goals, abandon
+      if (this.currentPath.length === 0) {
+        this._pathFailCount = (this._pathFailCount || 0) + 1;
+        if (this._pathFailCount >= 3) {
+          this._pathFailCount = 0;
+          this._committedGoal = null;
+          this.currentBehavior = null;
+          bot._lootPatrolGoal = null;
+          bot._huntGoal = null;
+          bot._patrolGoal = null;
+          // Pick a random fallback goal toward map center
+          goalX = this.room.map.width / 2 + (Math.random() - 0.5) * 600;
+          goalY = this.room.map.height / 2 + (Math.random() - 0.5) * 600;
+          this.currentPath = navGrid.findPath(bot.x, bot.y, goalX, goalY);
+        }
+      } else {
+        this._pathFailCount = 0;
+      }
       this.pathGoalX = goalX;
       this.pathGoalY = goalY;
       this.pathRecalcTimer = 0.5;
@@ -456,7 +475,10 @@ export class BotAI {
     const dy = targetY - bot.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist > 5) {
+    if (dist <= 5) {
+      // At goal — clear commitment so bot picks new action next tick
+      this._committedGoal = null;
+    } else {
       // Normalize direction and set input based on dominant axis
       const ndx = dx / dist;
       const ndy = dy / dist;
