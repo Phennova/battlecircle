@@ -42,18 +42,18 @@ export class NavGrid {
    * Mark cells outside the zone radius as impassable (for BR mode).
    */
   markZone(centerX, centerY, radius) {
+    const radiusSq = radius * radius;
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         const idx = r * this.cols + c;
-        if (this.grid[idx] === 1) continue; // already blocked by wall
+        if (this.grid[idx] === 1) continue;
 
         const cx = (c + 0.5) * CELL_SIZE;
         const cy = (r + 0.5) * CELL_SIZE;
         const dx = cx - centerX;
         const dy = cy - centerY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
 
-        this.grid[idx] = dist > radius ? 2 : 0;
+        this.grid[idx] = (dx * dx + dy * dy) > radiusSq ? 2 : 0;
       }
     }
   }

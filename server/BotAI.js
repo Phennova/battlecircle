@@ -157,25 +157,29 @@ export class BotAI {
     const visibleEnemies = [];
     const visibleItems = [];
 
+    const visionRangeSq = 600 * 600;
+    const itemRangeSq = 400 * 400;
+
     room.players.forEach((p) => {
       if (p.id === bot.id || !p.alive) return;
-      if (room.mode.teams && p.team === bot.team) return; // skip teammates
+      if (room.mode.teams && p.team === bot.team) return;
 
-      // Simple LOS check (raycast)
-      if (this._hasLOS(bot.x, bot.y, p.x, p.y, allWalls)) {
-        const dist = Math.sqrt((p.x - bot.x) ** 2 + (p.y - bot.y) ** 2);
-        if (dist < 600) { // vision range
-          visibleEnemies.push(p);
-          // Update memory
-          this._rememberEnemy(p);
-        }
+      const edx = p.x - bot.x;
+      const edy = p.y - bot.y;
+      const distSq = edx * edx + edy * edy;
+      // Distance pre-check before expensive LOS raycast
+      if (distSq < visionRangeSq && this._hasLOS(bot.x, bot.y, p.x, p.y, allWalls)) {
+        visibleEnemies.push(p);
+        this._rememberEnemy(p);
       }
     });
 
-    // Visible ground items
+    // Visible ground items — distance pre-check before LOS
     for (const item of room.groundItems) {
-      const dist = Math.sqrt((item.x - bot.x) ** 2 + (item.y - bot.y) ** 2);
-      if (dist < 400 && this._hasLOS(bot.x, bot.y, item.x, item.y, allWalls)) {
+      const idx = item.x - bot.x;
+      const idy = item.y - bot.y;
+      const distSq = idx * idx + idy * idy;
+      if (distSq < itemRangeSq && this._hasLOS(bot.x, bot.y, item.x, item.y, allWalls)) {
         visibleItems.push(item);
       }
     }
@@ -184,30 +188,45 @@ export class BotAI {
     const threats = assessThreats(bot, visibleEnemies);
     const nearestThreat = threats.length > 0 ? threats[0] : null;
 
-    // Find cover relative to nearest threat
-    let coverPos = null;
-    if (nearestThreat && room.navGrid) {
+    // Find cover relative to nearest threat (throttled — every 5 ticks)
+    let coverPos = this._cachedCover || null;
+    if (nearestThreat && room.navGrid && room.tick % 5 === 0) {
       coverPos = room.navGrid.findCover(
         bot.x, bot.y,
         nearestThreat.enemy.x, nearestThreat.enemy.y,
         allWalls, 200
       );
+      this._cachedCover = coverPos;
     }
 
-    // Check for nearby grenades
+    // Check for nearby grenades (distSq avoids sqrt)
     let nearbyGrenade = null;
+    const grenadeRangeSq = 120 * 120;
     for (const g of room.grenades) {
-      const dist = Math.sqrt((g.x - bot.x) ** 2 + (g.y - bot.y) ** 2);
-      if (dist < 120 && g.type === 'frag') {
+      const gdx = g.x - bot.x;
+      const gdy = g.y - bot.y;
+      if (gdx * gdx + gdy * gdy < grenadeRangeSq && g.type === 'frag') {
         nearbyGrenade = g;
         break;
       }
     }
 
-    // Last known enemy from memory
+    // Last known enemy from memory (avoid creating new array)
     const now = Date.now();
-    const recentMemory = this.memory.filter(m => now - m.timestamp < 5000);
-    const lastKnownEnemy = recentMemory.length > 0 ? recentMemory[0] : null;
+    let lastKnownEnemy = null;
+    for (let i = 0; i < this.memory.length; i++) {
+      if (now - this.memory[i].timestamp < 5000) {
+        lastKnownEnemy = this.memory[i];
+        break;
+      }
+    }
+    // Prune old memory in-place (every 20 ticks)
+    if (this.room.tick % 20 === 0) {
+      for (let i = this.memory.length - 1; i >= 0; i--) {
+        if (now - this.memory[i].timestamp >= 5000) this.memory.splice(i, 1);
+      }
+    }
+    // lastKnownEnemy already set above
 
     // Recent sound source
     const recentSound = this.soundSources.find(s => now - s.timestamp < 3000);
@@ -665,8 +684,10 @@ export class BotAI {
   _hasLOS(x1, y1, x2, y2, walls) {
     const dx = x2 - x1;
     const dy = y2 - y1;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const steps = Math.ceil(dist / 5); // 5px steps to catch thin walls
+    const distSq = dx * dx + dy * dy;
+    const dist = Math.sqrt(distSq);
+    // 10px steps — catches walls >=10px thick (all game walls are 10+)
+    const steps = Math.ceil(dist / 10);
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
       const px = x1 + dx * t;
